@@ -1,7 +1,7 @@
-import { createClient, type SupabaseClient } from "@supabase/supabase-js";
-import jwt from "@tsndr/cloudflare-worker-jwt";
-import { BgentRuntime, type Content, type Message, type State } from "bgent";
-import { type UUID } from "crypto";
+import { createClient, type SupabaseClient } from '@supabase/supabase-js';
+import jwt from '@tsndr/cloudflare-worker-jwt';
+import { BgentRuntime, type Content, type Message, type State } from 'bgent';
+import { type UUID } from 'crypto';
 
 const onMessage = async (
   message: Message,
@@ -15,7 +15,7 @@ const onMessage = async (
   }
 
   if (!senderContent) {
-    console.warn("Sender content null, skipping");
+    console.warn('Sender content null, skipping');
     return;
   }
 
@@ -56,25 +56,25 @@ const routes: Route[] = [
   {
     path: /^\/api\/agents\/message/,
     async handler({ req, env, userId, supabase }: HandlerArgs) {
-      if (req.method === "OPTIONS") {
+      if (req.method === 'OPTIONS') {
         return;
       }
 
       // parse the body from the request
       const message = await req.json();
 
-      console.log("NODE_ENV", env.NODE_ENV);
+      console.log('NODE_ENV', env.NODE_ENV);
 
       const runtime = new BgentRuntime({
-        debugMode: env.NODE_ENV === "development",
-        serverUrl: "https://api.openai.com/v1",
-        // @ts-ignore
-        supabase: supabase as any,
+        debugMode: env.NODE_ENV === 'development',
+        serverUrl: 'https://api.openai.com/v1',
+        // @ts-expect-error supabase client issue, need to fix
+        supabase,
         token: env.OPENAI_API_KEY,
       });
 
       if (!(message as Message).agentId) {
-        return new Response("agentId is required", { status: 400 });
+        return new Response('agentId is required', { status: 400 });
       }
 
       if (!(message as Message).senderId) {
@@ -91,11 +91,11 @@ const routes: Route[] = [
       try {
         await onMessage(message as Message, runtime);
       } catch (error) {
-        console.error("error", error);
+        console.error('error', error);
         return new Response(error as string, { status: 500 });
       }
 
-      return new Response("ok", { status: 200 });
+      return new Response('ok', { status: 200 });
     },
   },
 ];
@@ -111,15 +111,15 @@ export async function handleRequest(
 ) {
   const { pathname } = new URL(req.url);
 
-  if (req.method === "OPTIONS") {
+  if (req.method === 'OPTIONS') {
     return _setHeaders(
-      new Response("", {
+      new Response('', {
         status: 204,
-        statusText: "OK",
+        statusText: 'OK',
         headers: {
-          "Access-Control-Allow-Origin": "*",
-          "Access-Control-Allow-Methods": "*",
-          "Access-Control-Allow-Headers": "*",
+          'Access-Control-Allow-Origin': '*',
+          'Access-Control-Allow-Methods': '*',
+          'Access-Control-Allow-Headers': '*',
         },
       }),
     );
@@ -140,7 +140,7 @@ export async function handleRequest(
           },
         );
 
-        const token = req.headers.get("Authorization")?.replace("Bearer ", "");
+        const token = req.headers.get('Authorization')?.replace('Bearer ', '');
 
         const out = (token && jwt.decode(token)) as {
           payload: { sub: string; id: string };
@@ -150,12 +150,12 @@ export async function handleRequest(
         const userId = out?.payload?.sub || out?.payload?.id || out?.id;
 
         if (!userId) {
-          return _setHeaders(new Response("Unauthorized", { status: 401 }));
+          return _setHeaders(new Response('Unauthorized', { status: 401 }));
         }
 
         if (!userId) {
           console.log(
-            "Warning, userId is null, which means the token was not decoded properly. This will need to be fixed for security reasons.",
+            'Warning, userId is null, which means the token was not decoded properly. This will need to be fixed for security reasons.',
           );
         }
 
@@ -177,9 +177,9 @@ export async function handleRequest(
   // Default handler if no other routes are called
   return _setHeaders(
     new Response(
-      JSON.stringify({ content: "No handler found for this path" }),
+      JSON.stringify({ content: 'No handler found for this path' }),
       {
-        headers: { "Content-Type": "application/json" },
+        headers: { 'Content-Type': 'application/json' },
         status: 200,
       },
     ),
@@ -189,36 +189,36 @@ export async function handleRequest(
 function _setHeaders(res: Response) {
   const defaultHeaders = [
     {
-      key: "Access-Control-Allow-Origin",
-      value: "*",
+      key: 'Access-Control-Allow-Origin',
+      value: '*',
     },
     {
-      key: "Access-Control-Allow-Methods",
-      value: "GET,PUT,POST,DELETE,PATCH,OPTIONS",
+      key: 'Access-Control-Allow-Methods',
+      value: 'GET,PUT,POST,DELETE,PATCH,OPTIONS',
     },
     {
-      key: "Access-Control-Allow-Headers",
-      value: "*",
+      key: 'Access-Control-Allow-Headers',
+      value: '*',
     },
     {
-      key: "Access-Control-Expose-Headers",
-      value: "*",
+      key: 'Access-Control-Expose-Headers',
+      value: '*',
     },
     {
-      key: "Access-Control-Allow-Private-Network",
-      value: "true",
+      key: 'Access-Control-Allow-Private-Network',
+      value: 'true',
     },
     {
-      key: "Cross-Origin-Opener-Policy",
-      value: "same-origin",
+      key: 'Cross-Origin-Opener-Policy',
+      value: 'same-origin',
     },
     {
-      key: "Cross-Origin-Embedder-Policy",
-      value: "require-corp",
+      key: 'Cross-Origin-Embedder-Policy',
+      value: 'require-corp',
     },
     {
-      key: "Cross-Origin-Resource-Policy",
-      value: "cross-origin",
+      key: 'Cross-Origin-Resource-Policy',
+      value: 'cross-origin',
     },
   ];
 

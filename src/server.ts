@@ -50,40 +50,40 @@ router.post('/', async (request, env) => {
   if (interaction.type === InteractionType.PING) {
     // The `PING` message is used during the initial webhook handshake, and is
     // required to configure the webhook in the developer portal.
+    // @ts-expect-error this is what was in the example
     return new JsonResponse({
       type: InteractionResponseType.PONG,
-    },
-    { status: 200 });
+    });
   }
 
   if (interaction.type === InteractionType.APPLICATION_COMMAND) {
     // Most user commands will come as `APPLICATION_COMMAND`.
     switch (interaction.data.name.toLowerCase()) {
       case TEST_COMMAND.name.toLowerCase(): {
-        
         const response = await handleRequest(request, env);
 
-        console.log('response', response)
-
+        console.log('response', response);
+        // @ts-expect-error this is what was in the example
         return new JsonResponse({
           type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
           data: {
             content: response,
           },
-        },
-        { status: 200 });
+        });
       }
       case INVITE_COMMAND.name.toLowerCase(): {
         const applicationId = env.DISCORD_APPLICATION_ID;
         const INVITE_URL = `https://discord.com/oauth2/authorize?client_id=${applicationId}&scope=applications.commands`;
-        return new JsonResponse({
-          type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
-          data: {
-            content: INVITE_URL,
-            flags: InteractionResponseFlags.EPHEMERAL,
+        return new JsonResponse(
+          {
+            type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+            data: {
+              content: INVITE_URL,
+              flags: InteractionResponseFlags.EPHEMERAL,
+            },
           },
-        },
-        { status: 200 });
+          { status: 200 },
+        );
       }
       default:
         return new JsonResponse({ error: 'Unknown Type' }, { status: 400 });
@@ -95,7 +95,10 @@ router.post('/', async (request, env) => {
 });
 router.all('*', () => new Response('Not Found.', { status: 404 }));
 
-async function verifyDiscordRequest(request: Request, env: { [key: string]: string }) {
+async function verifyDiscordRequest(
+  request: Request,
+  env: { [key: string]: string },
+) {
   const signature = request.headers.get('x-signature-ed25519');
   const timestamp = request.headers.get('x-signature-timestamp');
   const body = await request.text();
