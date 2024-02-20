@@ -1,0 +1,41 @@
+{
+  "name": "afbot",
+  "version": "0.1.0",
+  "description": "Aframe FAQ and Docs bot",
+  "type": "module",
+  "private": true,
+  "main": "src/server.ts",
+  "scripts": {
+    "start": "wrangler start",
+    "dev": "wrangler dev",
+    "ngrok": "ngrok http 8787",
+    "test": "c8 mocha test",
+    "fix": "eslint --fix '**/*.ts'",
+    "lint": "eslint '**/*.ts'",
+    "register": "node src/register.ts",
+    "publish": "wrangler deploy"
+  },
+  "keywords": [],
+  "license": "MIT",
+  "dependencies": {
+    "@supabase/supabase-js": "^2.39.3",
+    "@tsndr/cloudflare-worker-jwt": "^2.4.5",
+    "@types/node": "^20.11.19",
+    "bgent": "^0.0.12",
+    "discord-interactions": "^3.4.0",
+    "itty-router": "^4.0.13"
+  },
+  "devDependencies": {
+    "c8": "^9.0.0",
+    "chai": "^5.0.0",
+    "dotenv": "^16.0.3",
+    "eslint": "^8.41.0",
+    "eslint-config-prettier": "^9.0.0",
+    "eslint-plugin-prettier": "^5.0.0",
+    "mocha": "^10.2.0",
+    "ngrok": "^5.0.0-beta.2",
+    "prettier": "^3.0.1",
+    "sinon": "^17.0.0",
+    "wrangler": "^3.0.1"
+  }
+}

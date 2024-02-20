@@ -1,0 +1,9 @@
+name = "afbot"
+main = "src/server.ts"
+compatibility_date = "2023-11-21"
+node_compat = true
+
+# [secrets]
+# DISCORD_TOKEN
+# DISCORD_PUBLIC_KEY
+# DISCORD_APPLICATION_ID
