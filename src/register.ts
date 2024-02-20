@@ -1,4 +1,4 @@
-import { TEST_COMMAND, INVITE_COMMAND } from './commands.js';
+import { TEST_COMMAND, INVITE_COMMAND } from './commands';
 import dotenv from 'dotenv';
 import process from 'process';
 

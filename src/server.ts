@@ -8,9 +8,9 @@ import {
   InteractionType,
   verifyKey,
 } from 'discord-interactions';
-import { TEST_COMMAND, INVITE_COMMAND } from './commands.js';
+import { TEST_COMMAND, INVITE_COMMAND } from './commands';
 import { InteractionResponseFlags } from 'discord-interactions';
-import { handleRequest } from 'handleRequest.js';
+import { handleRequest } from 'handleRequest';
 
 class JsonResponse extends Response {
   constructor(body: BodyInit | unknown, init: ResponseInit) {

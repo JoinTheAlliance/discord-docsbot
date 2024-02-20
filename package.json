@@ -9,11 +9,10 @@
     "start": "wrangler start",
     "dev": "wrangler dev",
     "ngrok": "ngrok http 8787",
-    "test": "c8 mocha test",
-    "fix": "eslint --fix '**/*.ts'",
-    "lint": "eslint '**/*.ts'",
+    "fix": "tslint --fix '**/*.ts'",
+    "lint": "tslint '**/*.ts'",
     "register": "node src/register.ts",
-    "deploy": "wrangler deploy"
+    "publish": "wrangler deploy"
   },
   "keywords": [],
   "license": "MIT",
@@ -26,18 +25,12 @@
     "itty-router": "^4.0.13"
   },
   "devDependencies": {
-    "@typescript-eslint/eslint-plugin": "^7.0.2",
-    "@typescript-eslint/parser": "^7.0.2",
-    "c8": "^9.0.0",
-    "chai": "^5.0.0",
     "dotenv": "^16.0.3",
     "eslint": "^8.41.0",
     "eslint-config-prettier": "^9.0.0",
     "eslint-plugin-prettier": "^5.0.0",
-    "mocha": "^10.2.0",
     "ngrok": "^5.0.0-beta.2",
     "prettier": "^3.0.1",
-    "sinon": "^17.0.0",
     "wrangler": "^3.0.1"
   }
 }
