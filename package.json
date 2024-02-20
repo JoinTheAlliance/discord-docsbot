@@ -9,8 +9,8 @@
     "start": "wrangler start",
     "dev": "wrangler dev",
     "ngrok": "ngrok http 8787",
-    "fix": "tslint --fix '**/*.ts'",
-    "lint": "tslint '**/*.ts'",
+    "fix": "eslint --fix '**/*.ts'",
+    "lint": "eslint '**/*.ts'",
     "register": "node src/register.ts",
     "publish": "wrangler deploy"
   },
