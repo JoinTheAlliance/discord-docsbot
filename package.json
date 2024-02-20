@@ -12,7 +12,7 @@
     "fix": "eslint --fix '**/*.ts'",
     "lint": "eslint '**/*.ts'",
     "register": "node src/register.ts",
-    "publish": "wrangler deploy"
+    "deploy": "wrangler deploy"
   },
   "keywords": [],
   "license": "MIT",
