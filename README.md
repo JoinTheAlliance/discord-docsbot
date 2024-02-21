@@ -21,6 +21,22 @@ Before starting, you'll need a [Discord app](https://discord.com/developers/appl
 
 > ⚙️ Permissions can be configured by clicking on the `OAuth2` tab and using the `URL Generator`. After a URL is generated, you can install the app by pasting that URL into your browser and following the installation flow.
 
+## Database setup
+
+This library uses Supabase as a database. You can set up a free account at [supabase.io](https://supabase.io) and create a new project.
+
+### TODO: Add script and instructions for deploying fresh copy of database
+
+## Local supabase deployment instructions
+Step 1: On the Subase All Projects Dashboard, select “New Project”.  
+Step 2: Select the organization to store the new project in, assign a database name, password and region.  
+Step 3: Select “Create New Project”.  
+Step 4: Wait for the database to setup. This will take a few minutes as supabase setups various directories.  
+Step 5: Select the “SQL Editor” tab from the left navigation menu.  
+Step 6: Copy in your own SQL dump file or optionally use the provided file in the bgent directory at: "https://github.com/JoinTheAlliance/bgent/blob/main/src/supabase/db.sql". Note: You can use the command "supabase db dump" if you have a pre-exisiting supabase database to generate the SQL dump file.  
+Step 7: Paste the SQL code into the SQL Editor and hit run in the bottom right.  
+Step 8: Select the “Databases” tab from the left navigation menu to verify all of the tables have been added properly.
+
 ## Creating your Cloudflare worker
 
 Next, you'll need to create a Cloudflare Worker.
