@@ -3,7 +3,7 @@
  */
 
 import { SupabaseClient, createClient } from '@supabase/supabase-js';
-import { BgentRuntime, type Content, type Message } from 'bgent';
+import { BgentRuntime, type Action, type Message } from 'bgent';
 import { UUID } from 'crypto';
 import {
   InteractionResponseType,
@@ -13,9 +13,83 @@ import {
 import { Router } from 'itty-router';
 import getUuid from 'uuid-by-string';
 
+const wait = {
+  name: "WAIT",
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  validate: async (_runtime: BgentRuntime, _message: Message) => {
+    return true;
+  },
+  description:
+    "Do nothing and wait for another person to reply to the last message, or to continue their thought. For cases such as if the actors have already said goodbye to each other, use the ignore action instead.",
+  handler: async (
+    runtime: BgentRuntime,
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    _message: Message,
+  ): Promise<boolean> => {
+    if (runtime.debugMode) {
+      console.log("Waited.");
+    }
+    return true;
+  },
+  condition: "The agent wants to wait for the user to respond",
+  examples: [
+    // 1 long, 1 short example of exclamation
+    [
+      {
+        user: "{{user1}}",
+        content: "I finally finished that book I've been reading for weeks!",
+        action: "WAIT",
+      },
+    ],
+
+    [
+      {
+        user: "{{user1}}",
+        content:
+          "I caught a great film last night about pollution that really made me think.",
+        action: "WAIT",
+      },
+      {
+        user: "{{user2}}",
+        content: "Worth watching?",
+        action: "WAIT",
+      },
+      {
+        user: "{{user1}}",
+        content:
+          "Eh, maybe just watch a synopsis. Interesting content, but slow.",
+        action: "WAIT",
+      },
+    ],
+
+    [
+      {
+        user: "{{user1}}",
+        content: "I've been trying out pottery recently.",
+        action: "WAIT",
+      },
+      {
+        user: "{{user2}}",
+        content: "That sounds therapeutic. Made anything interesting?",
+        action: "WAIT",
+      },
+    ],
+
+    [
+      {
+        user: "{{user1}}",
+        content:
+          "Experimented with a new recipe and it was a disaster. Cooking is harder than it looks.",
+        action: "WAIT",
+      },
+    ],
+  ],
+} as Action;
+
+
 // Add this function to fetch the bot's name
 async function fetchBotName(botToken: string) {
-  const url = 'https://discord.com/api/v9/users/@me';
+  const url = 'https://discord.com/api/v10/users/@me';
 
   const response = await fetch(url, {
     method: 'GET',
@@ -40,15 +114,18 @@ async function ensureUserExists(supabase: SupabaseClient, userId: UUID, userName
     .eq('id', userId)
     .single();
 
+  if (error) {
+    console.error('Error fetching user:', error);
+  }
+
+  if (data) {
+    console.log('User exists:', data);
+  }
+
   if (!data) {
     // If userName is not provided and botToken is, fetch the bot's name
     if (!userName && botToken) {
-      try {
-        userName = await fetchBotName(botToken);
-      } catch (err) {
-        console.error('Error fetching bot name:', err);
-        return;
-      }
+      userName = await fetchBotName(botToken);
     }
 
     // User does not exist, so create them
@@ -73,6 +150,10 @@ async function ensureRoomExists(supabase: SupabaseClient, roomId: UUID) {
     .eq('id', roomId)
     .single();
 
+  if (error) {
+    console.error('Error fetching room:', error);
+  }
+
   if (!data) {
     // Room does not exist, so create it
     const { error } = await supabase
@@ -95,6 +176,10 @@ async function ensureParticipantInRoom(supabase: SupabaseClient, userId: UUID, r
     .eq('user_id', userId)
     .eq('room_id', roomId)
     .single();
+
+  if (error) {
+    console.error('Error fetching participant:', error);
+  }
 
   if (!data) {
     // Participant does not exist, so link user to room
@@ -188,13 +273,9 @@ router.get('/commands', async (_request, env) => {
   } else {
     console.error('Error registering commands');
     let errorText = `Error registering commands \n ${response.url}: ${response.status} ${response.statusText}`;
-    try {
-      const error = await response.text();
-      if (error) {
-        errorText = `${errorText} \n\n ${error}`;
-      }
-    } catch (err) {
-      console.error('Error reading body from request:', err);
+    const error = await response.text();
+    if (error) {
+      errorText = `${errorText} \n\n ${error}`;
     }
     console.error(errorText);
   }
@@ -206,95 +287,108 @@ router.get('/commands', async (_request, env) => {
  * include a JSON payload described here:
  * https://discord.com/developers/docs/interactions/receiving-and-responding#interaction-object
  */
-router.post('/', async (request, env) => {
-  const { isValid, interaction } = await server.verifyDiscordRequest(
-    request,
-    env,
-  );
-  console.log('interaction', interaction);
+router.post('/', async (request, env, event) => {
+  const { isValid, interaction } = await server.verifyDiscordRequest(request, env);
+
   if (!isValid || !interaction) {
     return new Response('Bad request signature.', { status: 401 });
   }
 
   if (interaction.type === InteractionType.PING) {
-    // The `PING` message is used during the initial webhook handshake, and is
-    // required to configure the webhook in the developer portal.
-    // @ts-expect-error this is what was in the example
-    return new JsonResponse({
-      type: InteractionResponseType.PONG,
-    });
+    // @ts-expect-error
+    return new JsonResponse({ type: InteractionResponseType.PONG });
   }
 
-  console.log('interaction', interaction);
-
-  // handle on TEST_COMMAND
-  // TODO: also handle if user pings the agent
   if (
     interaction.type === InteractionType.APPLICATION_COMMAND &&
     interaction.data.name === TEST_COMMAND.name
   ) {
-    const supabase = createClient(
-      env.SUPABASE_URL,
-      env.SUPABASE_SERVICE_API_KEY,
-      {
-        auth: { persistSession: false },
-      },
-    );
+    const supabase = createClient(env.SUPABASE_URL, env.SUPABASE_SERVICE_API_KEY, {
+      auth: { persistSession: false },
+    });
 
-    // Extract the user's Discord ID and convert it into a UUID
+    console.log('created supabase')
+
     const userId = getUuid(interaction.member.user.id) as UUID;
+    const userName = interaction.member.user.username;
+    const agentId = getUuid(env.DISCORD_APPLICATION_ID) as UUID;
+    const room_id = getUuid(interaction.channel_id) as UUID;
+
+
+    console.log('got ids')
+
+    // // Ensure all necessary records exist in Supabase
+    await ensureUserExists(supabase, agentId, null, env.DISCORD_TOKEN)
+    console.log('ensured user exists')
+    await ensureUserExists(supabase, userId, userName)
+    await ensureRoomExists(supabase, room_id)
+    await ensureParticipantInRoom(supabase, userId, room_id)
+    await ensureParticipantInRoom(supabase, agentId, room_id)
+
+    const messageContent = interaction.data.options[0].value;
+    console.log('interaction.data', interaction.data)
+
+    const message = {
+      content: { content: messageContent },
+      senderId: userId,
+      agentId,
+      userIds: [userId, agentId],
+      room_id,
+    } as unknown as Message;
 
     const runtime = new BgentRuntime({
-      debugMode: false,
+      debugMode: true,
       serverUrl: 'https://api.openai.com/v1',
       supabase: supabase,
       token: env.OPENAI_API_KEY,
+      evaluators: [],
+      actions: [wait]
     });
 
-    let responseContent;
+    let responseContent = 'How can I assist you with A-Frame?'; // Default response
 
-    // Check if there's additional text with the /help command
-    if (!interaction.data.options || interaction.data.options.length === 0) {
-      // No additional text provided, respond with a generic message
-      responseContent =
-        'Sure, what do you want me to help you with? Ask me a question!';
-    } else {
-      // Additional text provided, process it with Bgent runtime
-      const messageContent = interaction.data.options[0].value; // Assuming the first option contains the text
-      const agentId = getUuid(env.DISCORD_APPLICATION_ID) as UUID;
-      const room_id = getUuid(interaction.channel_id) as UUID;
-      const message = {
-        content: { content: messageContent },
-        senderId: userId,
-        agentId,
-        userIds: [userId, agentId],
-        room_id,
-      } as unknown as Message;
+    async function processCommand() {
+      // TODO: This does not resolve
+      console.log('handling request')
+      try {
+        const data = { content: "ok" }; // (await runtime.handleRequest(message)) as Content;
 
-      const userName = interaction.member.user.username; // Assuming this is how you get the user's Discord username
+        responseContent = `You asked: \`\`\`${messageContent}\`\`\`\nAnswer: ${data.content}`;
+        const followUpUrl = `https://discord.com/api/v10/webhooks/${env.DISCORD_APPLICATION_ID}/${interaction.token}/messages/@original`;
 
-      // TODO: This could probably be done more efficiently, 5 database calls for every message is a lot...
-      await Promise.all([
-        ensureUserExists(supabase, userId, userName),
-        ensureUserExists(supabase, agentId, null, env.DISCORD_TOKEN),
-        ensureRoomExists(supabase, room_id),
-        ensureParticipantInRoom(supabase, userId, room_id),
-        ensureParticipantInRoom(supabase, agentId, room_id)
-      ]);
+        // Send the follow-up message with the actual response
+        console.log('followUpUrl', followUpUrl)
+        const followUpResponse = await fetch(followUpUrl, {
+          method: 'PATCH', // Use PATCH to edit the original deferred message
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bot ${env.DISCORD_TOKEN}`,
+          },
+          body: JSON.stringify({ content: responseContent }),
+        });
 
-      const data = (await runtime.handleRequest(message)) as Content;
-      responseContent = `You asked: \`\`\`\n${messageContent}\`\`\`\n${data.content}`; // Assuming 'data.content' contains the response text from Bgent
+        console.log('Follow-up response status:', followUpResponse);
+        const followUpData = await followUpResponse.json();
+        console.log('Follow-up response data:', followUpData);
+      } catch (error) {
+        console.error('Error processing command:', error);
+      }
     }
-    // @ts-expect-error this is what was in the example
-    return new JsonResponse({
-      type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
-      data: { content: responseContent },
-    });
+
+    // Immediately acknowledge the interaction with a deferred response
+    // @ts-expect-error
+    const deferredResponse = new JsonResponse({ type: InteractionResponseType.DEFERRED_CHANNEL_MESSAGE_WITH_SOURCE });
+
+    event.waitUntil(processCommand());
+
+    // Return the deferred response to Discord immediately
+    return deferredResponse;
   }
 
   // Fallback for unknown types or commands
   return new JsonResponse({ error: 'Unknown Type' }, { status: 400 });
 });
+
 
 router.all('*', () => new Response('Not Found.', { status: 404 }));
 
@@ -318,8 +412,8 @@ async function verifyDiscordRequest(
 
 const server = {
   verifyDiscordRequest: verifyDiscordRequest,
-  fetch: async function (request: Request, env: { [key: string]: string }) {
-    return router.handle(request, env);
+  fetch: async function (request: Request, env: { [key: string]: string }, event: any) {
+    return router.handle(request, env, event);
   },
 };
 
