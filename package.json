@@ -1,7 +1,7 @@
 {
   "name": "afbot",
   "version": "0.1.0",
-  "description": "Aframe FAQ and Docs bot",
+  "description": "Aframe Helpbot",
   "type": "module",
   "private": true,
   "main": "src/index.ts",
