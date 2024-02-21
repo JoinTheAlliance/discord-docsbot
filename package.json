@@ -19,11 +19,13 @@
     "@supabase/supabase-js": "^2.39.3",
     "@tsndr/cloudflare-worker-jwt": "^2.4.5",
     "@types/node": "^20.11.19",
+    "bgent": "^0.0.13",
     "discord-interactions": "^3.4.0",
     "itty-router": "^4.0.13",
     "uuid-by-string": "^4.0.0"
   },
   "devDependencies": {
+    "@typescript-eslint/eslint-plugin": "^7.0.2",
     "dotenv": "^16.0.3",
     "eslint": "^8.41.0",
     "eslint-config-prettier": "^9.0.0",

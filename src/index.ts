@@ -3,7 +3,7 @@
  */
 
 import { SupabaseClient, createClient } from '@supabase/supabase-js';
-import { BgentRuntime, type Action, type Message } from 'bgent';
+import { BgentRuntime, type Action, type Message, type Content } from 'bgent';
 import { UUID } from 'crypto';
 import {
   InteractionResponseType,
@@ -14,78 +14,77 @@ import { Router } from 'itty-router';
 import getUuid from 'uuid-by-string';
 
 const wait = {
-  name: "WAIT",
+  name: 'WAIT',
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   validate: async (_runtime: BgentRuntime, _message: Message) => {
     return true;
   },
   description:
-    "Do nothing and wait for another person to reply to the last message, or to continue their thought. For cases such as if the actors have already said goodbye to each other, use the ignore action instead.",
+    'Do nothing and wait for another person to reply to the last message, or to continue their thought. For cases such as if the actors have already said goodbye to each other, use the ignore action instead.',
   handler: async (
     runtime: BgentRuntime,
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     _message: Message,
   ): Promise<boolean> => {
     if (runtime.debugMode) {
-      console.log("Waited.");
+      console.log('Waited.');
     }
     return true;
   },
-  condition: "The agent wants to wait for the user to respond",
+  condition: 'The agent wants to wait for the user to respond',
   examples: [
     // 1 long, 1 short example of exclamation
     [
       {
-        user: "{{user1}}",
+        user: '{{user1}}',
         content: "I finally finished that book I've been reading for weeks!",
-        action: "WAIT",
+        action: 'WAIT',
       },
     ],
 
     [
       {
-        user: "{{user1}}",
+        user: '{{user1}}',
         content:
-          "I caught a great film last night about pollution that really made me think.",
-        action: "WAIT",
+          'I caught a great film last night about pollution that really made me think.',
+        action: 'WAIT',
       },
       {
-        user: "{{user2}}",
-        content: "Worth watching?",
-        action: "WAIT",
+        user: '{{user2}}',
+        content: 'Worth watching?',
+        action: 'WAIT',
       },
       {
-        user: "{{user1}}",
+        user: '{{user1}}',
         content:
-          "Eh, maybe just watch a synopsis. Interesting content, but slow.",
-        action: "WAIT",
+          'Eh, maybe just watch a synopsis. Interesting content, but slow.',
+        action: 'WAIT',
       },
     ],
 
     [
       {
-        user: "{{user1}}",
+        user: '{{user1}}',
         content: "I've been trying out pottery recently.",
-        action: "WAIT",
+        action: 'WAIT',
       },
       {
-        user: "{{user2}}",
-        content: "That sounds therapeutic. Made anything interesting?",
-        action: "WAIT",
+        user: '{{user2}}',
+        content: 'That sounds therapeutic. Made anything interesting?',
+        action: 'WAIT',
       },
     ],
 
     [
       {
-        user: "{{user1}}",
+        user: '{{user1}}',
         content:
-          "Experimented with a new recipe and it was a disaster. Cooking is harder than it looks.",
-        action: "WAIT",
+          'Experimented with a new recipe and it was a disaster. Cooking is harder than it looks.',
+        action: 'WAIT',
       },
     ],
   ],
 } as Action;
-
 
 // Add this function to fetch the bot's name
 async function fetchBotName(botToken: string) {
@@ -107,8 +106,13 @@ async function fetchBotName(botToken: string) {
 }
 
 // Modify this function to include fetching the bot's name if the user is an agent
-async function ensureUserExists(supabase: SupabaseClient, userId: UUID, userName: string | null, botToken?: string) {
-  let { data, error } = await supabase
+async function ensureUserExists(
+  supabase: SupabaseClient,
+  userId: UUID,
+  userName: string | null,
+  botToken?: string,
+) {
+  const { data, error } = await supabase
     .from('accounts')
     .select('*')
     .eq('id', userId)
@@ -129,9 +133,14 @@ async function ensureUserExists(supabase: SupabaseClient, userId: UUID, userName
     }
 
     // User does not exist, so create them
-    const { error } = await supabase
-      .from('accounts')
-      .insert([{ id: userId, name: userName, email: userName + '@discord', register_complete: true }]);
+    const { error } = await supabase.from('accounts').insert([
+      {
+        id: userId,
+        name: userName,
+        email: userName + '@discord',
+        register_complete: true,
+      },
+    ]);
 
     if (error) {
       console.error('Error creating user:', error);
@@ -141,10 +150,9 @@ async function ensureUserExists(supabase: SupabaseClient, userId: UUID, userName
   }
 }
 
-
 // Function to ensure a room exists
 async function ensureRoomExists(supabase: SupabaseClient, roomId: UUID) {
-  let { data, error } = await supabase
+  const { data, error } = await supabase
     .from('rooms') // Replace 'rooms' with your actual rooms table name
     .select('*')
     .eq('id', roomId)
@@ -169,8 +177,12 @@ async function ensureRoomExists(supabase: SupabaseClient, roomId: UUID) {
 }
 
 // Function to ensure a participant is linked to a room
-async function ensureParticipantInRoom(supabase: SupabaseClient, userId: UUID, roomId: UUID) {
-  let { data, error } = await supabase
+async function ensureParticipantInRoom(
+  supabase: SupabaseClient,
+  userId: UUID,
+  roomId: UUID,
+) {
+  const { data, error } = await supabase
     .from('participants') // Replace 'participants' with your actual participants table name
     .select('*')
     .eq('user_id', userId)
@@ -288,7 +300,10 @@ router.get('/commands', async (_request, env) => {
  * https://discord.com/developers/docs/interactions/receiving-and-responding#interaction-object
  */
 router.post('/', async (request, env, event) => {
-  const { isValid, interaction } = await server.verifyDiscordRequest(request, env);
+  const { isValid, interaction } = await server.verifyDiscordRequest(
+    request,
+    env,
+  );
 
   if (!isValid || !interaction) {
     return new Response('Bad request signature.', { status: 401 });
@@ -303,30 +318,33 @@ router.post('/', async (request, env, event) => {
     interaction.type === InteractionType.APPLICATION_COMMAND &&
     interaction.data.name === TEST_COMMAND.name
   ) {
-    const supabase = createClient(env.SUPABASE_URL, env.SUPABASE_SERVICE_API_KEY, {
-      auth: { persistSession: false },
-    });
+    const supabase = createClient(
+      env.SUPABASE_URL,
+      env.SUPABASE_SERVICE_API_KEY,
+      {
+        auth: { persistSession: false },
+      },
+    );
 
-    console.log('created supabase')
+    console.log('created supabase');
 
     const userId = getUuid(interaction.member.user.id) as UUID;
     const userName = interaction.member.user.username;
     const agentId = getUuid(env.DISCORD_APPLICATION_ID) as UUID;
     const room_id = getUuid(interaction.channel_id) as UUID;
 
-
-    console.log('got ids')
+    console.log('got ids');
 
     // // Ensure all necessary records exist in Supabase
-    await ensureUserExists(supabase, agentId, null, env.DISCORD_TOKEN)
-    console.log('ensured user exists')
-    await ensureUserExists(supabase, userId, userName)
-    await ensureRoomExists(supabase, room_id)
-    await ensureParticipantInRoom(supabase, userId, room_id)
-    await ensureParticipantInRoom(supabase, agentId, room_id)
+    await ensureUserExists(supabase, agentId, null, env.DISCORD_TOKEN);
+    console.log('ensured user exists');
+    await ensureUserExists(supabase, userId, userName);
+    await ensureRoomExists(supabase, room_id);
+    await ensureParticipantInRoom(supabase, userId, room_id);
+    await ensureParticipantInRoom(supabase, agentId, room_id);
 
     const messageContent = interaction.data.options[0].value;
-    console.log('interaction.data', interaction.data)
+    console.log('interaction.data', interaction.data);
 
     const message = {
       content: { content: messageContent },
@@ -342,22 +360,22 @@ router.post('/', async (request, env, event) => {
       supabase: supabase,
       token: env.OPENAI_API_KEY,
       evaluators: [],
-      actions: [wait]
+      actions: [wait],
     });
 
     let responseContent = 'How can I assist you with A-Frame?'; // Default response
 
     async function processCommand() {
       // TODO: This does not resolve
-      console.log('handling request')
+      console.log('handling request');
       try {
-        const data = { content: "ok" }; // (await runtime.handleRequest(message)) as Content;
+        const data = (await runtime.handleRequest(message)) as Content;
 
         responseContent = `You asked: \`\`\`${messageContent}\`\`\`\nAnswer: ${data.content}`;
         const followUpUrl = `https://discord.com/api/v10/webhooks/${env.DISCORD_APPLICATION_ID}/${interaction.token}/messages/@original`;
 
         // Send the follow-up message with the actual response
-        console.log('followUpUrl', followUpUrl)
+        console.log('followUpUrl', followUpUrl);
         const followUpResponse = await fetch(followUpUrl, {
           method: 'PATCH', // Use PATCH to edit the original deferred message
           headers: {
@@ -376,8 +394,10 @@ router.post('/', async (request, env, event) => {
     }
 
     // Immediately acknowledge the interaction with a deferred response
-    // @ts-expect-error
-    const deferredResponse = new JsonResponse({ type: InteractionResponseType.DEFERRED_CHANNEL_MESSAGE_WITH_SOURCE });
+    // @ts-expect-error - This is a valid response type
+    const deferredResponse = new JsonResponse({
+      type: InteractionResponseType.DEFERRED_CHANNEL_MESSAGE_WITH_SOURCE,
+    });
 
     event.waitUntil(processCommand());
 
@@ -388,7 +408,6 @@ router.post('/', async (request, env, event) => {
   // Fallback for unknown types or commands
   return new JsonResponse({ error: 'Unknown Type' }, { status: 400 });
 });
-
 
 router.all('*', () => new Response('Not Found.', { status: 404 }));
 
@@ -412,7 +431,12 @@ async function verifyDiscordRequest(
 
 const server = {
   verifyDiscordRequest: verifyDiscordRequest,
-  fetch: async function (request: Request, env: { [key: string]: string }, event: any) {
+  fetch: async function (
+    request: Request,
+    env: { [key: string]: string },
+    // @ts-expect-error - This is a valid event type
+    event,
+  ) {
     return router.handle(request, env, event);
   },
 };
