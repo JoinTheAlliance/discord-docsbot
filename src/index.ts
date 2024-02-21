@@ -20,7 +20,15 @@ import getUuid from 'uuid-by-string';
 
 const TEST_COMMAND = {
   name: 'help',
-  description: 'Test a command.',
+  description: 'Get help from the bot.',
+  options: [
+    {
+      name: 'question',
+      description: 'Ask a question to the bot.',
+      type: 3,
+      required: false,
+    },
+  ],
 };
 
 class JsonResponse extends Response {
@@ -120,19 +128,23 @@ router.post('/', async (request, env) => {
     });
   }
 
+  console.log('interaction', interaction);
+
   // handle on TEST_COMMAND
-  if (interaction.data.name === TEST_COMMAND.name) {
+  // TODO: also handle if user pings the agent
+  if (
+    interaction.type === InteractionType.APPLICATION_COMMAND &&
+    interaction.data.name === TEST_COMMAND.name
+  ) {
     const supabase = createClient(
       env.SUPABASE_URL,
       env.SUPABASE_SERVICE_API_KEY,
       {
-        auth: {
-          persistSession: false,
-        },
+        auth: { persistSession: false },
       },
     );
 
-    // convert the user's discord ID into a UUID
+    // Extract the user's Discord ID and convert it into a UUID
     const userId = interaction.member.user.id;
 
     const runtime = new BgentRuntime({
@@ -142,35 +154,38 @@ router.post('/', async (request, env) => {
       token: env.OPENAI_API_KEY,
     });
 
-    if (!userId) {
-      console.log(
-        'Warning, userId is null, which means the token was not decoded properly. This will need to be fixed for security reasons.',
-      );
+    let responseContent;
+
+    // Check if there's additional text with the /help command
+    if (!interaction.data.options || interaction.data.options.length === 0) {
+      // No additional text provided, respond with a generic message
+      responseContent =
+        'Sure, what do you want me to help you with? Ask me a question!';
+    } else {
+      // Additional text provided, process it with Bgent runtime
+      const messageContent = interaction.data.options[0].value; // Assuming the first option contains the text
+
+      const message = {
+        content: { content: messageContent },
+        senderId: getUuid(userId),
+        agentId: getUuid(env.DISCORD_APPLICATION_ID),
+        userIds: [getUuid(userId), getUuid(env.DISCORD_APPLICATION_ID)],
+      } as unknown as Message;
+
+      const data = (await runtime.handleRequest(message)) as Content;
+      responseContent = data.content; // Assuming 'data.content' contains the response text from Bgent
     }
-
-    const message = {
-      senderContent: interaction.data.body,
-      senderId: getUuid(userId),
-      agentId: getUuid(env.DISCORD_APPLICATION_ID),
-      userIds: [] as UUID[],
-    } as unknown as Message;
-
-    message.userIds = [message.senderId, message.agentId];
-
-    const data = (await runtime.handleRequest(message)) as Content;
-
     // @ts-expect-error this is what was in the example
     return new JsonResponse({
       type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
-      data: {
-        content: data,
-      },
+      data: { content: responseContent },
     });
   }
 
-  // console.error('Unknown Type');
-  // return new JsonResponse({ error: 'Unknown Type' }, { status: 400 });
+  // Fallback for unknown types or commands
+  return new JsonResponse({ error: 'Unknown Type' }, { status: 400 });
 });
+
 router.all('*', () => new Response('Not Found.', { status: 404 }));
 
 async function verifyDiscordRequest(
