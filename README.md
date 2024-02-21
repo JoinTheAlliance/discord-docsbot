@@ -1,6 +1,6 @@
 # AFBot
 
-Aframe Helperbot for Discord
+A-Frame Helperbot for Discord
 
 This bot is based on the tutorial [in the Discord developer documentation](https://discord.com/developers/docs/tutorials/hosting-on-cloudflare-workers)
 

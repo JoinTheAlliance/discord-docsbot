@@ -20,11 +20,11 @@ import getUuid from 'uuid-by-string';
 
 const TEST_COMMAND = {
   name: 'help',
-  description: 'Get help from the bot.',
+  description: 'Ask a question about A-Frame.',
   options: [
     {
       name: 'question',
-      description: 'Ask a question to the bot.',
+      description: 'The question to ask.',
       type: 3,
       required: false,
     },
