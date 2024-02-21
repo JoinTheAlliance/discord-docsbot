@@ -1,6 +1,6 @@
 # AFBot
 
-Aframe FAQ and Docs Bot for Discord
+Aframe Helperbot for Discord
 
 This bot is based on the tutorial [in the Discord developer documentation](https://discord.com/developers/docs/tutorials/hosting-on-cloudflare-workers)
 
@@ -55,10 +55,10 @@ Rename `example.dev.vars` to `.dev.vars`, and make sure to set each variable.
 
 ### Register commands
 
-The following command only needs to be run once:
+To refresh the commands for your bot, visit this URL in your browser:
 
 ```
-$ npm run register
+https://localhost:8787/commands
 ```
 
 ### Run app
@@ -66,7 +66,7 @@ $ npm run register
 Now you should be ready to start your server:
 
 ```
-$ npm run dev
+npm run dev
 ```
 
 ### Setting up ngrok
@@ -74,7 +74,7 @@ $ npm run dev
 When a user types a slash command, Discord will send an HTTP request to a given endpoint. During local development this can be a little challenging, so we're going to use a tool called `ngrok` to create an HTTP tunnel.
 
 ```
-$ npm run ngrok
+npm run ngrok
 ```
 
 ![forwarding](https://user-images.githubusercontent.com/534619/157511497-19c8cef7-c349-40ec-a9d3-4bc0147909b0.png)
@@ -111,7 +111,10 @@ release:
 The credentials in `.dev.vars` are only applied locally. The production service needs access to credentials from your app:
 
 ```
-$ wrangler secret put DISCORD_TOKEN
-$ wrangler secret put DISCORD_PUBLIC_KEY
-$ wrangler secret put DISCORD_APPLICATION_ID
+wrangler secret put DISCORD_TOKEN
+wrangler secret put DISCORD_PUBLIC_KEY
+wrangler secret put DISCORD_APPLICATION_ID
+wrangler secret put OPENAI_API_KEY
+wrangler secret put SUPABASE_URL
+wrangler secret put SUPABASE_SERVICE_API_KEY
 ```
