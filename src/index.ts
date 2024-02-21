@@ -3,7 +3,7 @@
  */
 
 import { SupabaseClient, createClient } from '@supabase/supabase-js';
-import { BgentRuntime, type Action, type Message, type Content } from 'bgent';
+import { BgentRuntime, wait, type Message, type Content } from 'bgent';
 import { UUID } from 'crypto';
 import {
   InteractionResponseType,
@@ -12,79 +12,6 @@ import {
 } from 'discord-interactions';
 import { Router } from 'itty-router';
 import getUuid from 'uuid-by-string';
-
-const wait = {
-  name: 'WAIT',
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  validate: async (_runtime: BgentRuntime, _message: Message) => {
-    return true;
-  },
-  description:
-    'Do nothing and wait for another person to reply to the last message, or to continue their thought. For cases such as if the actors have already said goodbye to each other, use the ignore action instead.',
-  handler: async (
-    runtime: BgentRuntime,
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    _message: Message,
-  ): Promise<boolean> => {
-    if (runtime.debugMode) {
-      console.log('Waited.');
-    }
-    return true;
-  },
-  condition: 'The agent wants to wait for the user to respond',
-  examples: [
-    // 1 long, 1 short example of exclamation
-    [
-      {
-        user: '{{user1}}',
-        content: "I finally finished that book I've been reading for weeks!",
-        action: 'WAIT',
-      },
-    ],
-
-    [
-      {
-        user: '{{user1}}',
-        content:
-          'I caught a great film last night about pollution that really made me think.',
-        action: 'WAIT',
-      },
-      {
-        user: '{{user2}}',
-        content: 'Worth watching?',
-        action: 'WAIT',
-      },
-      {
-        user: '{{user1}}',
-        content:
-          'Eh, maybe just watch a synopsis. Interesting content, but slow.',
-        action: 'WAIT',
-      },
-    ],
-
-    [
-      {
-        user: '{{user1}}',
-        content: "I've been trying out pottery recently.",
-        action: 'WAIT',
-      },
-      {
-        user: '{{user2}}',
-        content: 'That sounds therapeutic. Made anything interesting?',
-        action: 'WAIT',
-      },
-    ],
-
-    [
-      {
-        user: '{{user1}}',
-        content:
-          'Experimented with a new recipe and it was a disaster. Cooking is harder than it looks.',
-        action: 'WAIT',
-      },
-    ],
-  ],
-} as Action;
 
 // Add this function to fetch the bot's name
 async function fetchBotName(botToken: string) {
@@ -310,7 +237,7 @@ router.post('/', async (request, env, event) => {
   }
 
   if (interaction.type === InteractionType.PING) {
-    // @ts-expect-error
+    // @ts-expect-error - This is a valid response type
     return new JsonResponse({ type: InteractionResponseType.PONG });
   }
 
@@ -363,43 +290,42 @@ router.post('/', async (request, env, event) => {
       actions: [wait],
     });
 
-    let responseContent = 'How can I assist you with A-Frame?'; // Default response
-
-    async function processCommand() {
-      // TODO: This does not resolve
-      console.log('handling request');
-      try {
-        const data = (await runtime.handleRequest(message)) as Content;
-
-        responseContent = `You asked: \`\`\`${messageContent}\`\`\`\nAnswer: ${data.content}`;
-        const followUpUrl = `https://discord.com/api/v10/webhooks/${env.DISCORD_APPLICATION_ID}/${interaction.token}/messages/@original`;
-
-        // Send the follow-up message with the actual response
-        console.log('followUpUrl', followUpUrl);
-        const followUpResponse = await fetch(followUpUrl, {
-          method: 'PATCH', // Use PATCH to edit the original deferred message
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bot ${env.DISCORD_TOKEN}`,
-          },
-          body: JSON.stringify({ content: responseContent }),
-        });
-
-        console.log('Follow-up response status:', followUpResponse);
-        const followUpData = await followUpResponse.json();
-        console.log('Follow-up response data:', followUpData);
-      } catch (error) {
-        console.error('Error processing command:', error);
-      }
-    }
-
     // Immediately acknowledge the interaction with a deferred response
     // @ts-expect-error - This is a valid response type
     const deferredResponse = new JsonResponse({
       type: InteractionResponseType.DEFERRED_CHANNEL_MESSAGE_WITH_SOURCE,
     });
 
-    event.waitUntil(processCommand());
+    event.waitUntil(
+      (async () => {
+        let responseContent = 'How can I assist you with A-Frame?'; // Default response
+        try {
+          const data = (await runtime.handleRequest(message)) as Content;
+
+          responseContent = `You asked: \`\`\`${
+            (message.content as Content).content
+          }\`\`\`\nAnswer: ${data.content}`;
+          const followUpUrl = `https://discord.com/api/v10/webhooks/${env.DISCORD_APPLICATION_ID}/${interaction.token}/messages/@original`;
+
+          // Send the follow-up message with the actual response
+          console.log('followUpUrl', followUpUrl);
+          const followUpResponse = await fetch(followUpUrl, {
+            method: 'PATCH', // Use PATCH to edit the original deferred message
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bot ${env.DISCORD_TOKEN}`,
+            },
+            body: JSON.stringify({ content: responseContent }),
+          });
+
+          console.log('Follow-up response status:', followUpResponse);
+          const followUpData = await followUpResponse.json();
+          console.log('Follow-up response data:', followUpData);
+        } catch (error) {
+          console.error('Error processing command:', error);
+        }
+      })(),
+    );
 
     // Return the deferred response to Discord immediately
     return deferredResponse;
