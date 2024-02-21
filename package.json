@@ -4,14 +4,13 @@
   "description": "Aframe FAQ and Docs bot",
   "type": "module",
   "private": true,
-  "main": "src/server.ts",
+  "main": "src/index.ts",
   "scripts": {
     "start": "wrangler start",
     "dev": "wrangler dev",
     "ngrok": "ngrok http 8787",
     "fix": "eslint --fix '**/*.ts'",
     "lint": "eslint '**/*.ts'",
-    "register": "node src/register.ts",
     "deploy": "wrangler deploy"
   },
   "keywords": [],
@@ -22,7 +21,8 @@
     "@types/node": "^20.11.19",
     "bgent": "^0.0.12",
     "discord-interactions": "^3.4.0",
-    "itty-router": "^4.0.13"
+    "itty-router": "^4.0.13",
+    "uuid-by-string": "^4.0.0"
   },
   "devDependencies": {
     "dotenv": "^16.0.3",

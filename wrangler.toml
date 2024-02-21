@@ -1,9 +1,7 @@
 name = "afbot"
-main = "src/server.ts"
+main = "src/index.ts"
 compatibility_date = "2023-11-21"
 node_compat = true
 
-# [secrets]
-# DISCORD_TOKEN
-# DISCORD_PUBLIC_KEY
-# DISCORD_APPLICATION_ID
+[dev]
+port = 8787
