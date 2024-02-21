@@ -2,9 +2,9 @@
  * The core server that runs on a Cloudflare worker.
  */
 
-import { createClient } from '@supabase/supabase-js';
+import { SupabaseClient, createClient } from '@supabase/supabase-js';
 import { BgentRuntime, type Content, type Message } from 'bgent';
-import { type UUID } from 'crypto';
+import { UUID } from 'crypto';
 import {
   InteractionResponseType,
   InteractionType,
@@ -12,6 +12,103 @@ import {
 } from 'discord-interactions';
 import { Router } from 'itty-router';
 import getUuid from 'uuid-by-string';
+
+// Add this function to fetch the bot's name
+async function fetchBotName(botToken: string) {
+  const url = 'https://discord.com/api/v9/users/@me';
+
+  const response = await fetch(url, {
+    method: 'GET',
+    headers: {
+      Authorization: `Bot ${botToken}`,
+    },
+  });
+
+  if (!response.ok) {
+    throw new Error(`Error fetching bot details: ${response.statusText}`);
+  }
+
+  const data = await response.json();
+  return data.username; // Or data.tag for username#discriminator
+}
+
+// Modify this function to include fetching the bot's name if the user is an agent
+async function ensureUserExists(supabase: SupabaseClient, userId: UUID, userName: string | null, botToken?: string) {
+  let { data, error } = await supabase
+    .from('accounts')
+    .select('*')
+    .eq('id', userId)
+    .single();
+
+  if (!data) {
+    // If userName is not provided and botToken is, fetch the bot's name
+    if (!userName && botToken) {
+      try {
+        userName = await fetchBotName(botToken);
+      } catch (err) {
+        console.error('Error fetching bot name:', err);
+        return;
+      }
+    }
+
+    // User does not exist, so create them
+    const { error } = await supabase
+      .from('accounts')
+      .insert([{ id: userId, name: userName, email: userName + '@discord', register_complete: true }]);
+
+    if (error) {
+      console.error('Error creating user:', error);
+    } else {
+      console.log(`User ${userName} created successfully.`);
+    }
+  }
+}
+
+
+// Function to ensure a room exists
+async function ensureRoomExists(supabase: SupabaseClient, roomId: UUID) {
+  let { data, error } = await supabase
+    .from('rooms') // Replace 'rooms' with your actual rooms table name
+    .select('*')
+    .eq('id', roomId)
+    .single();
+
+  if (!data) {
+    // Room does not exist, so create it
+    const { error } = await supabase
+      .from('rooms') // Replace 'rooms' with your actual rooms table name
+      .insert([{ id: roomId }]);
+
+    if (error) {
+      console.error('Error creating room:', error);
+    } else {
+      console.log(`Room ${roomId} created successfully.`);
+    }
+  }
+}
+
+// Function to ensure a participant is linked to a room
+async function ensureParticipantInRoom(supabase: SupabaseClient, userId: UUID, roomId: UUID) {
+  let { data, error } = await supabase
+    .from('participants') // Replace 'participants' with your actual participants table name
+    .select('*')
+    .eq('user_id', userId)
+    .eq('room_id', roomId)
+    .single();
+
+  if (!data) {
+    // Participant does not exist, so link user to room
+    const { error } = await supabase
+      .from('participants') // Replace 'participants' with your actual participants table name
+      .insert([{ user_id: userId, room_id: roomId }]);
+
+    if (error) {
+      console.error('Error linking user to room:', error);
+    } else {
+      console.log(`User ${userId} linked to room ${roomId} successfully.`);
+    }
+  }
+}
 
 /**
  * Share command metadata from a common spot to be used for both runtime
@@ -145,7 +242,7 @@ router.post('/', async (request, env) => {
     );
 
     // Extract the user's Discord ID and convert it into a UUID
-    const userId = interaction.member.user.id;
+    const userId = getUuid(interaction.member.user.id) as UUID;
 
     const runtime = new BgentRuntime({
       debugMode: false,
@@ -164,16 +261,29 @@ router.post('/', async (request, env) => {
     } else {
       // Additional text provided, process it with Bgent runtime
       const messageContent = interaction.data.options[0].value; // Assuming the first option contains the text
-
+      const agentId = getUuid(env.DISCORD_APPLICATION_ID) as UUID;
+      const room_id = getUuid(interaction.channel_id) as UUID;
       const message = {
         content: { content: messageContent },
-        senderId: getUuid(userId),
-        agentId: getUuid(env.DISCORD_APPLICATION_ID),
-        userIds: [getUuid(userId), getUuid(env.DISCORD_APPLICATION_ID)],
+        senderId: userId,
+        agentId,
+        userIds: [userId, agentId],
+        room_id,
       } as unknown as Message;
 
+      const userName = interaction.member.user.username; // Assuming this is how you get the user's Discord username
+
+      // TODO: This could probably be done more efficiently, 5 database calls for every message is a lot...
+      await Promise.all([
+        ensureUserExists(supabase, userId, userName),
+        ensureUserExists(supabase, agentId, null, env.DISCORD_TOKEN),
+        ensureRoomExists(supabase, room_id),
+        ensureParticipantInRoom(supabase, userId, room_id),
+        ensureParticipantInRoom(supabase, agentId, room_id)
+      ]);
+
       const data = (await runtime.handleRequest(message)) as Content;
-      responseContent = data.content; // Assuming 'data.content' contains the response text from Bgent
+      responseContent = `You asked: \`\`\`\n${messageContent}\`\`\`\n${data.content}`; // Assuming 'data.content' contains the response text from Bgent
     }
     // @ts-expect-error this is what was in the example
     return new JsonResponse({
