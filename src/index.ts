@@ -11,6 +11,7 @@ import {
   verifyKey,
 } from 'discord-interactions';
 import { Router } from 'itty-router';
+import { processDocs } from 'processDocs';
 import getUuid from 'uuid-by-string';
 
 // Add this function to fetch the bot's name
@@ -171,6 +172,12 @@ const router = Router();
  */
 router.get('/', (_request, env) => {
   return new Response(`👋 ${env.DISCORD_APPLICATION_ID}`);
+});
+
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+router.get('/docs', async (_request, _env) => {
+  await processDocs();
+  return new Response('Docs processed');
 });
 
 /**
