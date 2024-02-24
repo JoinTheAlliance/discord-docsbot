@@ -20,7 +20,7 @@
     "@supabase/supabase-js": "^2.39.3",
     "@tsndr/cloudflare-worker-jwt": "^2.5.0",
     "@types/node": "^20.11.19",
-    "bgent": "^0.0.15",
+    "bgent": "^0.0.19",
     "discord-interactions": "^3.4.0",
     "itty-router": "^4.0.13",
     "uuid-by-string": "^4.0.0"
