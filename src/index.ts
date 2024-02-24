@@ -307,7 +307,7 @@ router.post('/', async (request, env, event) => {
       (async () => {
         let responseContent = 'How can I assist you with A-Frame?'; // Default response
         try {
-          const data = (await runtime.handleRequest(message)) as Content;
+          const data = (await runtime.handleMessage(message)) as Content;
 
           responseContent = `You asked: \`\`\`${
             (message.content as Content).content
