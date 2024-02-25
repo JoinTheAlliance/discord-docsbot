@@ -2,7 +2,7 @@
  * The core server that runs on a Cloudflare worker.
  */
 
-import { PostgrestSingleResponse, SupabaseClient, createClient } from '@supabase/supabase-js';
+import { SupabaseClient, createClient } from '@supabase/supabase-js';
 import { BgentRuntime, wait, type Message, type Content } from 'bgent';
 import { UUID } from 'crypto';
 import {
