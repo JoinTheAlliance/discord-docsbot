@@ -1,5 +1,3 @@
-import { VectorizedData } from "bgent";
-
 /**
  * @description Updates the message content based on prior prompt knowledge from documents.
  * @param priorPromptKnowledgeFromDocs The prior knowledge obtained from documents.
@@ -7,7 +5,7 @@ import { VectorizedData } from "bgent";
  * @returns The updated message content with a prompt header if prior knowledge exists, otherwise null.
  */
 export async function updateMessageContent(
-  priorPromptKnowledgeFromDocs: VectorizedData,
+  priorPromptKnowledgeFromDocs: any,
   message: string,
 ) {
   try {
