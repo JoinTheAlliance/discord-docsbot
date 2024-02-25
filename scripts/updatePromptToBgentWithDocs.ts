@@ -13,7 +13,8 @@ export async function updateMessageContent(
   message: string,
 ) {
   try {
-    let promptHeader = 'Please use the following content to help answer the questions the user has: ';
+    let promptHeader =
+      'Please use the following content to help answer the questions the user has: ';
     if (priorPromptKnowledgeFromDocs?.data?.length > 0) {
       for (const obj of priorPromptKnowledgeFromDocs.data) {
         const documentWithoutNewlines = obj.content.replace(/\n/g, ' ');
