@@ -11,8 +11,11 @@ import {
   verifyKey,
 } from 'discord-interactions';
 import { Router } from 'itty-router';
-import { processDocs } from 'processDocs';
+// import { processDocs } from 'processDocs';
 import getUuid from 'uuid-by-string';
+import { OpenAI } from 'openai';
+import { searchSimilarMessages } from '../scripts/searchForSimilarVectorizedDocs';
+import { updateMessageContent } from '../scripts/updatePromptToBgentWithDocs';
 
 // Add this function to fetch the bot's name
 async function fetchBotName(botToken: string) {
@@ -176,7 +179,7 @@ router.get('/', (_request, env) => {
 
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 router.get('/docs', async (_request, _env) => {
-  await processDocs();
+  //await processDocs();
   return new Response('Docs processed');
 });
 
@@ -229,6 +232,25 @@ router.get('/commands', async (_request, env) => {
 });
 
 /**
+ * Refresh the docs
+ */
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+router.get('/refreshDocs', async (_request, env) => {
+  const token = env.DISCORD_TOKEN;
+  const applicationId = env.DISCORD_APPLICATION_ID;
+  if (!token) {
+    throw new Error('The DISCORD_TOKEN environment variable is required.');
+  }
+  if (!applicationId) {
+    throw new Error(
+      'The DISCORD_APPLICATION_ID environment variable is required.',
+    );
+  }
+
+  return new Response('Docs refreshed');
+});
+
+/**
  * Main route for all requests sent from Discord.  All incoming messages will
  * include a JSON payload described here:
  * https://discord.com/developers/docs/interactions/receiving-and-responding#interaction-object
@@ -238,6 +260,9 @@ router.post('/', async (request, env, event) => {
     request,
     env,
   );
+
+  const OPENAI_API_KEY = env.OPENAI_API_KEY;
+  const openai = new OpenAI({ apiKey: OPENAI_API_KEY });
 
   if (!isValid || !interaction) {
     return new Response('Bad request signature.', { status: 401 });
@@ -280,8 +305,19 @@ router.post('/', async (request, env, event) => {
     const messageContent = interaction.data.options[0].value;
     console.log('interaction.data', interaction.data);
 
+    // Searches the database for the top5 similar documents relating to the message with a similarity of a certain threshold
+    const priorPromptKnowledgeFromDocs = await searchSimilarMessages(
+      messageContent,
+      supabase,
+      openai,
+    );
+    const newContent = await updateMessageContent(
+      priorPromptKnowledgeFromDocs,
+      messageContent,
+    );
+
     const message = {
-      content: { content: messageContent },
+      content: { content: newContent, original_content: messageContent },
       senderId: userId,
       agentId,
       userIds: [userId, agentId],
@@ -310,7 +346,7 @@ router.post('/', async (request, env, event) => {
           const data = (await runtime.handleMessage(message)) as Content;
 
           responseContent = `You asked: \`\`\`${
-            (message.content as Content).content
+            (message.content as Content).original_content
           }\`\`\`\nAnswer: ${data.content}`;
           const followUpUrl = `https://discord.com/api/v10/webhooks/${env.DISCORD_APPLICATION_ID}/${interaction.token}/messages/@original`;
 
