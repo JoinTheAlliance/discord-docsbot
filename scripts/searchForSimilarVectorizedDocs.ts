@@ -8,12 +8,16 @@ import openai from 'openai';
  * @param openai The OpenAI client used for creating embeddings.
  * @returns An array of found documents similar to the provided message, or null if an error occurs.
  */
-export async function searchSimilarMessages(message: string, supabase: SupabaseClient, openai: openai) {
+export async function searchSimilarMessages(
+  message: string,
+  supabase: SupabaseClient,
+  openai: openai
+) {
   try {
     // Embedding creation
     const embeddingResponse = await openai.embeddings.create({
-        model: 'text-embedding-ada-002',
-        input: message,
+      model: 'text-embedding-ada-002',
+      input: message,
     });
 
     // Get the vector from the embedding response
@@ -21,10 +25,10 @@ export async function searchSimilarMessages(message: string, supabase: SupabaseC
 
     // Query the Supabase table
     const foundDocuments = await supabase.rpc('match_documents', {
-    query_embedding: newVector,
-    match_threshold: 0.6,
-    match_count: 5,
-    })
+      query_embedding: newVector,
+      match_threshold: 0.6,
+      match_count: 5,
+    });
 
     return foundDocuments;
   } catch (error) {
