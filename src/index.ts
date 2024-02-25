@@ -250,7 +250,6 @@ router.get('/refreshDocs', async (_request, env) => {
   return new Response('Docs refreshed');
 });
 
-
 /**
  * Main route for all requests sent from Discord.  All incoming messages will
  * include a JSON payload described here:
@@ -308,12 +307,15 @@ router.post('/', async (request, env, event) => {
 
     // Searches the database for the top5 similar documents relating to the message with a similarity of a certain threshold
     const priorPromptKnowledgeFromDocs = await searchSimilarMessages(
-            messageContent, 
-            supabase, 
-            openai);
+      messageContent,
+      supabase,
+      openai
+    );
     const newContent = await updateMessageContent(
-            priorPromptKnowledgeFromDocs,
-            messageContent);
+      priorPromptKnowledgeFromDocs,
+      messageContent
+    );
+
 
     const message = {
       content: { content: newContent, original_content: messageContent },

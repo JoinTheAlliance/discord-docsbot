@@ -6,7 +6,7 @@
  */
 export async function updateMessageContent(
   priorPromptKnowledgeFromDocs: any,
-  message: string
+  message: string,
 ) {
   try {
     let promptHeader = 'Please use the following content to help answer the questions the user has: ';

@@ -11,7 +11,7 @@ import openai from 'openai';
 export async function searchSimilarMessages(
   message: string,
   supabase: SupabaseClient,
-  openai: openai
+  openai: openai,
 ) {
   try {
     // Embedding creation
