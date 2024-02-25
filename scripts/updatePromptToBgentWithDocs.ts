@@ -4,8 +4,9 @@
  * @param message The message content to be updated.
  * @returns The updated message content with a prompt header if prior knowledge exists, otherwise null.
  */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export async function updateMessageContent(
-  priorPromptKnowledgeFromDocs: { data: string | any[]; },
+  priorPromptKnowledgeFromDocs: any,
   message: string,
 ) {
   try {
