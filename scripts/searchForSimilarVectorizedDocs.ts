@@ -24,7 +24,7 @@ export async function searchSimilarMessages(
     const newVector = embeddingResponse.data[0].embedding;
 
     // Query the Supabase table
-    const foundDocuments = await supabase.rpc('match_documents', {
+    const foundDocuments: any = await supabase.rpc('match_documents', {
       query_embedding: newVector,
       match_threshold: 0.6,
       match_count: 5,

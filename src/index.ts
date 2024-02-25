@@ -309,13 +309,12 @@ router.post('/', async (request, env, event) => {
     const priorPromptKnowledgeFromDocs = await searchSimilarMessages(
       messageContent,
       supabase,
-      openai
+      openai,
     );
     const newContent = await updateMessageContent(
       priorPromptKnowledgeFromDocs,
-      messageContent
+      messageContent,
     );
-
 
     const message = {
       content: { content: newContent, original_content: messageContent },

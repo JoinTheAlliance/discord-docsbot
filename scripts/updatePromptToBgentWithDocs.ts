@@ -5,7 +5,7 @@
  * @returns The updated message content with a prompt header if prior knowledge exists, otherwise null.
  */
 export async function updateMessageContent(
-  priorPromptKnowledgeFromDocs: any,
+  priorPromptKnowledgeFromDocs: { data: string | any[]; },
   message: string,
 ) {
   try {
@@ -19,8 +19,8 @@ export async function updateMessageContent(
     }
 
     return promptHeader;
-  } catch (error: any) {
-    console.error('Error updating message content:', error.message);
+  } catch (error) {
+    console.error('Error updating message content:', error);
     return null;
   }
 }
