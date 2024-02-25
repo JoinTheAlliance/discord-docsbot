@@ -1,12 +1,13 @@
+import { PostgrestSingleResponse } from "@supabase/supabase-js";
+
 /**
  * @description Updates the message content based on prior prompt knowledge from documents.
  * @param priorPromptKnowledgeFromDocs The prior knowledge obtained from documents.
  * @param message The message content to be updated.
  * @returns The updated message content with a prompt header if prior knowledge exists, otherwise null.
  */
-// @ts-ignore
 export async function updateMessageContent(
-  priorPromptKnowledgeFromDocs: any,
+  priorPromptKnowledgeFromDocs: PostgrestSingleResponse<any>,
   message: string,
 ) {
   try {

@@ -2,7 +2,7 @@
  * The core server that runs on a Cloudflare worker.
  */
 
-import { SupabaseClient, createClient } from '@supabase/supabase-js';
+import { PostgrestSingleResponse, SupabaseClient, createClient } from '@supabase/supabase-js';
 import { BgentRuntime, wait, type Message, type Content } from 'bgent';
 import { UUID } from 'crypto';
 import {
@@ -306,7 +306,7 @@ router.post('/', async (request, env, event) => {
     console.log('interaction.data', interaction.data);
 
     // Searches the database for the top5 similar documents relating to the message with a similarity of a certain threshold
-    const priorPromptKnowledgeFromDocs = await searchSimilarMessages(
+    const priorPromptKnowledgeFromDocs: PostgrestSingleResponse<any> = await searchSimilarMessages(
       messageContent,
       supabase,
       openai,
