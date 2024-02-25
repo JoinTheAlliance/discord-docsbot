@@ -238,7 +238,6 @@ router.get('/commands', async (_request, env) => {
 router.get('/refreshDocs', async (_request, env) => {
   const token = env.DISCORD_TOKEN;
   const applicationId = env.DISCORD_APPLICATION_ID;
-  console.log("sup austin")
   if (!token) {
     throw new Error('The DISCORD_TOKEN environment variable is required.');
   }
