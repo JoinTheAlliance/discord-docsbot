@@ -306,7 +306,7 @@ router.post('/', async (request, env, event) => {
     console.log('interaction.data', interaction.data);
 
     // Searches the database for the top5 similar documents relating to the message with a similarity of a certain threshold
-    const priorPromptKnowledgeFromDocs: PostgrestSingleResponse<any> = await searchSimilarMessages(
+    const priorPromptKnowledgeFromDocs = await searchSimilarMessages(
       messageContent,
       supabase,
       openai,

@@ -13,20 +13,25 @@ export async function searchSimilarMessages(
   supabase: SupabaseClient,
   openai: openai,
 ) {
-  // Embedding creation
-  const embeddingResponse = await openai.embeddings.create({
-    model: 'text-embedding-ada-002',
-    input: message,
-  });
+  try {
+    // Embedding creation
+    const embeddingResponse = await openai.embeddings.create({
+      model: 'text-embedding-ada-002',
+      input: message,
+    });
 
-  // Get the vector from the embedding response
-  const newVector = embeddingResponse.data[0].embedding;
+    // Get the vector from the embedding response
+    const newVector = embeddingResponse.data[0].embedding;
 
-  // Query the Supabase table
-  const foundDocuments = await supabase.rpc('match_documents', {
-    query_embedding: newVector,
-    match_threshold: 0.6,
-    match_count: 5,
-  });
-  return foundDocuments;
+    // Query the Supabase table
+    const foundDocuments = await supabase.rpc('match_documents', {
+      query_embedding: newVector,
+      match_threshold: 0.6,
+      match_count: 5,
+    });
+    return foundDocuments;
+  } catch (error) {
+    console.error('Error searching similar messages:', error);
+    return null;
+  }
 }

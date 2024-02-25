@@ -1,4 +1,4 @@
-import { PostgrestSingleResponse } from "@supabase/supabase-js";
+import { VectorizedData } from "bgent";
 
 /**
  * @description Updates the message content based on prior prompt knowledge from documents.
@@ -7,7 +7,7 @@ import { PostgrestSingleResponse } from "@supabase/supabase-js";
  * @returns The updated message content with a prompt header if prior knowledge exists, otherwise null.
  */
 export async function updateMessageContent(
-  priorPromptKnowledgeFromDocs: PostgrestSingleResponse<any>,
+  priorPromptKnowledgeFromDocs: VectorizedData,
   message: string,
 ) {
   try {
