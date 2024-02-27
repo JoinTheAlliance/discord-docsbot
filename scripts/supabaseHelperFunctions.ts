@@ -20,3 +20,6 @@ export function initializeSupabase(
   
     return supabase;
   }
+
+
+

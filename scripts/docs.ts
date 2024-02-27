@@ -1,6 +1,7 @@
 import { Octokit } from "octokit";
 import openai from 'openai';
 import { SupabaseClient } from '@supabase/supabase-js';
+import { generateEmbeddings } from '../scripts/embeddingCreation/createSectionEmbeddings';
 
 export interface ProcessDocsParams {
   supabase: SupabaseClient;
@@ -42,7 +43,7 @@ function printSectionizedDocument(
 function sectionizeDocument(
   documentContent: string,
   sectionDelimiter: string
-): { sections: string[]; url: string } {
+): { sections: string[]; urlPath: string } {
   // Retrieve YAML header and extract out documentation url path.
   const yamlHeader = documentContent.match(/---\n([\s\S]+?)\n---/);
   let documentationUrl: string = ""
@@ -143,7 +144,7 @@ export async function vectorizeDocuments(
             contentResponse.data,
             sectionDelimiter
           );
-          //generateEmbeddings(sections, sourceDocumentationUrl + urlPath);
+          //generateEmbeddings(sections, sourceDocumentationUrl + urlPath, supabase, openai);
         })
       );
     }

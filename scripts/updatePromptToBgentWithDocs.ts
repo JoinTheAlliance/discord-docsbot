@@ -1,7 +1,3 @@
-interface PriorPromptKnowledge {
-  data: { content: string }[];
-}
-
 /**
  * @description Updates the message content based on prior prompt knowledge from documents.
  * @param priorPromptKnowledgeFromDocs The prior knowledge obtained from documents.
@@ -9,7 +5,7 @@ interface PriorPromptKnowledge {
  * @returns The updated message content with a prompt header if prior knowledge exists, otherwise null.
  */
 export async function updateMessageContent(
-  priorPromptKnowledgeFromDocs: PriorPromptKnowledge,
+  priorPromptKnowledgeFromDocs: any,
   message: string,
 ) {
   try {
