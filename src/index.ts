@@ -2,7 +2,7 @@
  * The core server that runs on a Cloudflare worker.
  */
 
-import { SupabaseClient, createClient } from '@supabase/supabase-js';
+import { SupabaseClient } from '@supabase/supabase-js';
 import { BgentRuntime, wait, type Message, type Content } from 'bgent';
 import { UUID } from 'crypto';
 import {
@@ -11,11 +11,50 @@ import {
   verifyKey,
 } from 'discord-interactions';
 import { Router } from 'itty-router';
-// import { processDocs } from 'processDocs';
+import {
+  ProcessDocsParams,
+  vectorizeDocuments,
+  fetchLatestPullRequest 
+} from '../scripts/docs';
 import getUuid from 'uuid-by-string';
+import { Octokit } from "octokit";
 import { OpenAI } from 'openai';
 import { searchSimilarMessages } from '../scripts/searchForSimilarVectorizedDocs';
 import { updateMessageContent } from '../scripts/updatePromptToBgentWithDocs';
+import { initializeOpenAi } from '../scripts/openAiHelperFunctions';
+import { initializeSupabase } from '../scripts/supabaseHelperFunctions';
+
+import * as dotenv from 'dotenv';
+import * as fs from 'fs';
+
+// Load environment variables from .env file
+const envConfig = dotenv.parse(fs.readFileSync('../.dev.vars'));
+
+// Assign environment variables to process.env
+for (const key in envConfig) {
+    process.env[key] = envConfig[key];
+}
+
+// .env variables are now available
+const openai: OpenAI = initializeOpenAi(process.env.OPENAI_API_KEY);
+// Initialize Supabase
+const supabase: SupabaseClient = initializeSupabase(
+  process.env.SUPABASE_URL,
+  process.env.SUPABASE_SERVICE_API_KEY
+);
+
+// Establish parameters for processing documentation.
+const processDocsParams: ProcessDocsParams = {
+  supabase: supabase,
+  openai: openai,
+  octokit: new Octokit({ auth: process.env.GITHUB_AUTH_TOKEN }),
+  repoOwner: 'aframevr',
+  repoName: 'aframe',
+  pathToRepoDocuments: 'docs',
+  documentationFileExt: '',
+  sectionDelimiter: '#',
+  sourceDocumentationUrl: 'https://aframe.io/docs/master/'
+};
 
 // Add this function to fetch the bot's name
 async function fetchBotName(botToken: string) {
@@ -178,9 +217,8 @@ router.get('/', (_request, env) => {
 });
 
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
-router.get('/docs', async (_request, _env) => {
-  //await processDocs();
-  return new Response('Docs processed');
+router.get('/refresh-docs', async (_request, _env) => {
+  fetchLatestPullRequest(processDocsParams, _env);
 });
 
 /**
@@ -232,25 +270,6 @@ router.get('/commands', async (_request, env) => {
 });
 
 /**
- * Refresh the docs
- */
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-router.get('/refreshDocs', async (_request, env) => {
-  const token = env.DISCORD_TOKEN;
-  const applicationId = env.DISCORD_APPLICATION_ID;
-  if (!token) {
-    throw new Error('The DISCORD_TOKEN environment variable is required.');
-  }
-  if (!applicationId) {
-    throw new Error(
-      'The DISCORD_APPLICATION_ID environment variable is required.',
-    );
-  }
-
-  return new Response('Docs refreshed');
-});
-
-/**
  * Main route for all requests sent from Discord.  All incoming messages will
  * include a JSON payload described here:
  * https://discord.com/developers/docs/interactions/receiving-and-responding#interaction-object
@@ -260,9 +279,6 @@ router.post('/', async (request, env, event) => {
     request,
     env,
   );
-
-  const OPENAI_API_KEY = env.OPENAI_API_KEY;
-  const openai = new OpenAI({ apiKey: OPENAI_API_KEY });
 
   if (!isValid || !interaction) {
     return new Response('Bad request signature.', { status: 401 });
@@ -277,15 +293,6 @@ router.post('/', async (request, env, event) => {
     interaction.type === InteractionType.APPLICATION_COMMAND &&
     interaction.data.name === TEST_COMMAND.name
   ) {
-    const supabase = createClient(
-      env.SUPABASE_URL,
-      env.SUPABASE_SERVICE_API_KEY,
-      {
-        auth: { persistSession: false },
-      },
-    );
-
-    console.log('created supabase');
 
     const userId = getUuid(interaction.member.user.id) as UUID;
     const userName = interaction.member.user.username;
@@ -311,6 +318,7 @@ router.post('/', async (request, env, event) => {
       supabase,
       openai,
     );
+
     const newContent = await updateMessageContent(
       priorPromptKnowledgeFromDocs,
       messageContent,
