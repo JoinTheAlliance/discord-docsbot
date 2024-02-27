@@ -24,37 +24,9 @@ import { updateMessageContent } from '../scripts/updatePromptToBgentWithDocs';
 import { initializeOpenAi } from '../scripts/openAiHelperFunctions';
 import { initializeSupabase } from '../scripts/supabaseHelperFunctions';
 
-import * as dotenv from 'dotenv';
-import * as fs from 'fs';
-
-// Load environment variables from .env file
-const envConfig = dotenv.parse(fs.readFileSync('../.dev.vars'));
-
-// Assign environment variables to process.env
-for (const key in envConfig) {
-    process.env[key] = envConfig[key];
-}
-
-// .env variables are now available
-const openai: OpenAI = initializeOpenAi(process.env.OPENAI_API_KEY);
-// Initialize Supabase
-const supabase: SupabaseClient = initializeSupabase(
-  process.env.SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_API_KEY
-);
-
-// Establish parameters for processing documentation.
-const processDocsParams: ProcessDocsParams = {
-  supabase: supabase,
-  openai: openai,
-  octokit: new Octokit({ auth: process.env.GITHUB_AUTH_TOKEN }),
-  repoOwner: 'aframevr',
-  repoName: 'aframe',
-  pathToRepoDocuments: 'docs',
-  documentationFileExt: '',
-  sectionDelimiter: '#',
-  sourceDocumentationUrl: 'https://aframe.io/docs/master/'
-};
+let openai: OpenAI;
+let supabase: SupabaseClient;
+let processDocsParams: ProcessDocsParams;
 
 // Add this function to fetch the bot's name
 async function fetchBotName(botToken: string) {
@@ -217,8 +189,17 @@ router.get('/', (_request, env) => {
 });
 
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
-router.get('/refresh-docs', async (_request, _env) => {
+router.get('/refresh-docs/:pullRequestNumber', async (_request, _env) => {
+  await initializeSupabaseAndOpenAIVariable(_env);
   fetchLatestPullRequest(processDocsParams, _env);
+});
+
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+router.get('/refresh-docs2', async (_request, _env) => {
+  await initializeSupabaseAndOpenAIVariable(_env);
+  vectorizeDocuments(processDocsParams);
+
+  return new Response('Docs refreshed');
 });
 
 /**
@@ -302,6 +283,7 @@ router.post('/', async (request, env, event) => {
     console.log('got ids');
 
     // // Ensure all necessary records exist in Supabase
+    await initializeSupabaseAndOpenAIVariable(env);
     await ensureUserExists(supabase, agentId, null, env.DISCORD_TOKEN);
     console.log('ensured user exists');
     await ensureUserExists(supabase, userId, userName);
@@ -417,5 +399,28 @@ const server = {
     return router.handle(request, env, event);
   },
 };
+
+async function initializeSupabaseAndOpenAIVariable(env: any) {
+  openai = initializeOpenAi(env.OPENAI_API_KEY);
+  // Initialize Supabase
+  supabase = initializeSupabase(
+    env.SUPABASE_URL,
+    env.SUPABASE_SERVICE_API_KEY
+  );
+  console.log(env.GITHUB_AUTH_TOKEN)
+  // Establish parameters for processing documentation.
+  processDocsParams = {
+    supabase: supabase,
+    openai: openai,
+    octokit: new Octokit({ auth: env.GITHUB_AUTH_TOKEN }),
+    repoOwner: 'aframevr',
+    repoName: 'aframe',
+    pathToRepoDocuments: 'docs',
+    documentationFileExt: '',
+    sectionDelimiter: '#',
+    sourceDocumentationUrl: 'https://aframe.io/docs/master/'
+  };  
+  return { supabaseClient: supabase, openAiClient: openai, processDocParameters: processDocsParams };
+}
 
 export default server;

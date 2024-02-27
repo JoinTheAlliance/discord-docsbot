@@ -70,6 +70,19 @@ function sectionizeDocument(
 
   return { sections: sections, urlPath: documentationUrl };
 }
+
+async function getAFrameRepo(octokit: any) {
+  try {
+    const response = octokit.request('GET /repos/:owner/:repo', {
+      owner: 'aframevr',
+      repo: 'aframe'
+    });
+
+    return response
+  } catch (error) {
+    console.error("Error:", error);
+  }
+}
   
 /**
  * Retrieves, processes, and stores all documents on a GitHub repository to a
@@ -92,18 +105,21 @@ export async function vectorizeDocuments(
       sectionDelimiter,
       sourceDocumentationUrl
     } = params
-
+    console.log('test1', repoOwner, repoName, pathToRepoDocuments)
     // Fetch the documentation directories or files.
-    let response = await octokit.request('GET /repos/{owner}/{repo}/contents/{path}', {
-      owner: repoOwner,
-      repo: repoName,
-      path: pathToRepoDocuments,
-      headers: {
-        'X-GitHub-Api-Version': '2022-11-28'
-      }
-    });
+    // let response = await octokit.request('GET /repos/{owner}/{repo}/contents/{path}', {
+    //   owner: repoOwner,
+    //   repo: repoName,
+    //   path: pathToRepoDocuments,
+    //   headers: {
+    //     'X-GitHub-Api-Version': '2022-11-28'
+    //   }
+    // });
+    let response = await getAFrameRepo(octokit)
+    console.log('response')
 
     response.data = Array.isArray(response.data) ? response.data : [response.data];
+    console.log('test2')
     // Process documents in each directory.
     for (const resData of response.data) {
       let dirDocuments: any[] = [];
@@ -129,7 +145,7 @@ export async function vectorizeDocuments(
       } else {
         throw new Error('Repository URL does not exist!');
       }
-
+      console.log('test3')
       // Retrieve document data for all docs to process.
       await Promise.all(
         dirDocuments.map(async (document) => {
@@ -144,11 +160,13 @@ export async function vectorizeDocuments(
             contentResponse.data,
             sectionDelimiter
           );
-          //generateEmbeddings(sections, sourceDocumentationUrl + urlPath, supabase, openai);
+          console.log('test4')
+          generateEmbeddings(sections, sourceDocumentationUrl + urlPath, supabase, openai);
         })
       );
     }
   } catch (error) {
+    console.log('Hit error: ', error)
     console.error('Error fetching data from GitHub API:', error);
   }
 }
