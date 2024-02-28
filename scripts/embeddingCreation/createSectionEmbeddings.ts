@@ -15,8 +15,10 @@ export async function generateEmbeddings(documents: Array<string>, sourceUrl: st
         console.log("Deleted Records: ", deletedRecords)
     }
 
+    console.log("Document length: ", documents.length)
     // Loops over each section of the new document
     for (const document of documents) {
+      console.log("Document inserting is2: ", document)
       await insertSummarization(document, sourceUrl, supabase, openai)
     }
 }

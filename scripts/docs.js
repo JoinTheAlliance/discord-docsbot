@@ -1,19 +1,20 @@
 import { Octokit } from "octokit";
 import openai from 'openai';
 import { SupabaseClient } from '@supabase/supabase-js';
-import { generateEmbeddings } from '../scripts/embeddingCreation/createSectionEmbeddings';
+import { generateEmbeddings } from './embeddingCreation/createSectionEmbeddings';
+import { request } from "@octokit/request";
 
-export interface ProcessDocsParams {
-  supabase: SupabaseClient;
-  openai: openai;
-  octokit: Octokit
-  repoOwner: string;
-  repoName: string;
-  pathToRepoDocuments: string;
-  documentationFileExt: string;
-  sectionDelimiter: string;
-  sourceDocumentationUrl: string;
-}
+// export interface ProcessDocsParams {
+//   supabase: SupabaseClient;
+//   openai: openai;
+//   octokit: Octokit
+//   repoOwner: string;
+//   repoName: string;
+//   pathToRepoDocuments: string;
+//   documentationFileExt: string;
+//   sectionDelimiter: string;
+//   sourceDocumentationUrl: string;
+// }
 
 /**
  * Prints the documentation URL and sections for a document. Used for testing.
@@ -22,9 +23,9 @@ export interface ProcessDocsParams {
  * @param {string} docURL - The URL where the documentation is located.
  */
 function printSectionizedDocument(
-  sections: string[],
-  docURL: string
-): void {
+  sections,
+  docURL
+) {
   console.log(`https://aframe.io/docs/master/${docURL}\n`);
   sections.forEach((section, index) => {
     console.log(`Section ${index + 1}:`);
@@ -41,12 +42,12 @@ function printSectionizedDocument(
  * @returns {object} - The document sections (`sections`) and documentation URL (`url`).
  */
 function sectionizeDocument(
-  documentContent: string,
-  sectionDelimiter: string
-): { sections: string[]; urlPath: string } {
+  documentContent,
+  sectionDelimiter
+) {
   // Retrieve YAML header and extract out documentation url path.
   const yamlHeader = documentContent.match(/---\n([\s\S]+?)\n---/);
-  let documentationUrl: string = ""
+  let documentationUrl = ""
   if (yamlHeader) {
       let section = yamlHeader[1].trim();
       const matchResult = section.match(/source_code:\s*src\/(.+)/);
@@ -65,23 +66,12 @@ function sectionizeDocument(
       .replace(yamlHeader ? yamlHeader[0] : '', '')
       .split(delim);
 
+  console.log('sections12: ', sections)
+
   // Debug
   printSectionizedDocument(sections, documentationUrl);
 
   return { sections: sections, urlPath: documentationUrl };
-}
-
-async function getAFrameRepo(octokit: any) {
-  try {
-    const response = octokit.request('GET /repos/:owner/:repo', {
-      owner: 'aframevr',
-      repo: 'aframe'
-    });
-
-    return response
-  } catch (error) {
-    console.error("Error:", error);
-  }
 }
   
 /**
@@ -91,8 +81,8 @@ async function getAFrameRepo(octokit: any) {
  * @param {string} params - 
  */
 export async function vectorizeDocuments(
-  params: ProcessDocsParams
-): Promise<void> {
+  params
+) {
   try {
     const {
       supabase,
@@ -107,22 +97,21 @@ export async function vectorizeDocuments(
     } = params
     console.log('test1', repoOwner, repoName, pathToRepoDocuments)
     // Fetch the documentation directories or files.
-    // let response = await octokit.request('GET /repos/{owner}/{repo}/contents/{path}', {
-    //   owner: repoOwner,
-    //   repo: repoName,
-    //   path: pathToRepoDocuments,
-    //   headers: {
-    //     'X-GitHub-Api-Version': '2022-11-28'
-    //   }
-    // });
-    let response = await getAFrameRepo(octokit)
-    console.log('response')
+    let response = await octokit.request('GET /repos/{owner}/{repo}/contents/{path}', {
+      owner: repoOwner,
+      repo: repoName,
+      path: pathToRepoDocuments,
+      headers: {
+        'X-GitHub-Api-Version': '2022-11-28'
+      }
+    });
+    console.log('response', response)
 
     response.data = Array.isArray(response.data) ? response.data : [response.data];
     console.log('test2')
     // Process documents in each directory.
     for (const resData of response.data) {
-      let dirDocuments: any[] = [];
+      let dirDocuments = [];
       if (resData.type == 'dir') {
         // Fetch all files from the directory.
         response = await octokit.request('GET /repos/{owner}/{repo}/contents/{path}', {
@@ -133,9 +122,10 @@ export async function vectorizeDocuments(
             'X-GitHub-Api-Version': '2022-11-28'
           }
         })
+        console.log(`/repos/${repoOwner}/${repoName}/contents/${pathToRepoDocuments + "/" + resData.name}`)
 
       // Type assertion for response.data
-      const documentsArray = response.data as any[];
+      const documentsArray = response.data;
 
       dirDocuments = documentsArray.filter((document) => 
         document.name.endsWith(`.${documentationFileExt}`)
@@ -149,18 +139,20 @@ export async function vectorizeDocuments(
       // Retrieve document data for all docs to process.
       await Promise.all(
         dirDocuments.map(async (document) => {
-          const contentResponse = await octokit.request('GET {downloadUrl}', {
+          console.log('test3.1', document.download_url)
+          const contentResponse = await octokit.request('GET /repos/aframevr/aframe/contents/docs/components/anchored.md', {
             downloadUrl: document.download_url,
             headers: {
               'X-GitHub-Api-Version': '2022-11-28' 
             }
           })
-
+          const decodedContent = Buffer.from(contentResponse.data.content, "base64").toString("utf-8");
+          console.log('test3.2', decodedContent)
           const { sections, urlPath } = sectionizeDocument(
-            contentResponse.data,
+            decodedContent,
             sectionDelimiter
           );
-          console.log('test4')
+          console.log('test4', sections, urlPath)
           generateEmbeddings(sections, sourceDocumentationUrl + urlPath, supabase, openai);
         })
       );
@@ -178,9 +170,9 @@ export async function vectorizeDocuments(
  * @param {string} pullRequestNum - 
  */
 export async function fetchLatestPullRequest(
-  params: ProcessDocsParams,
-  pullRequestNum: string
-): Promise<void> {
+  params,
+  pullRequestNum
+) {
   try {
     const {
       octokit,
@@ -204,7 +196,7 @@ export async function fetchLatestPullRequest(
       })
 
       if (response.data.length > 0) {
-        await Promise.all(response.data.map(async (filePath: any) => {
+        await Promise.all(response.data.map(async (filePath) => {
           if (filePath.filename.includes(`${pathToRepoDocuments}/`)) {
             await vectorizeDocuments(params);
           }

@@ -197,7 +197,7 @@ router.get('/refresh-docs/:pullRequestNumber', async (_request, _env) => {
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 router.get('/refresh-docs2', async (_request, _env) => {
   await initializeSupabaseAndOpenAIVariable(_env);
-  vectorizeDocuments(processDocsParams);
+  await vectorizeDocuments(processDocsParams);
 
   return new Response('Docs refreshed');
 });
@@ -416,7 +416,7 @@ async function initializeSupabaseAndOpenAIVariable(env: any) {
     repoOwner: 'aframevr',
     repoName: 'aframe',
     pathToRepoDocuments: 'docs',
-    documentationFileExt: '',
+    documentationFileExt: 'md',
     sectionDelimiter: '#',
     sourceDocumentationUrl: 'https://aframe.io/docs/master/'
   };  
