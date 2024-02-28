@@ -140,8 +140,10 @@ export async function vectorizeDocuments(
       await Promise.all(
         dirDocuments.map(async (document) => {
           console.log('test3.1', document.download_url)
-          const contentResponse = await octokit.request('GET /repos/aframevr/aframe/contents/docs/components/anchored.md', {
+          const stringAfterDocs = document.download_url.substring(document.download_url.indexOf("/docs/") + "/docs/".length);
+          const contentResponse = await octokit.request('GET /repos/aframevr/aframe/contents/docs/{stringAfterDocs}', {
             downloadUrl: document.download_url,
+            stringAfterDocs: stringAfterDocs,
             headers: {
               'X-GitHub-Api-Version': '2022-11-28' 
             }
