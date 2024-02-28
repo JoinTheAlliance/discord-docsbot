@@ -189,9 +189,11 @@ router.get('/', (_request, env) => {
 });
 
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
-router.get('/refresh-docs/:pullRequestNumber', async (_request, _env) => {
+router.get('/refresh-docs', async (_request, _env) => {
   await initializeSupabaseAndOpenAIVariable(_env);
-  fetchLatestPullRequest(processDocsParams, _env);
+  fetchLatestPullRequest(processDocsParams, '4995');
+
+  return new Response('Docs refreshed');
 });
 
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -407,7 +409,7 @@ async function initializeSupabaseAndOpenAIVariable(env: any) {
     env.SUPABASE_URL,
     env.SUPABASE_SERVICE_API_KEY
   );
-  console.log(env.GITHUB_AUTH_TOKEN)
+
   // Establish parameters for processing documentation.
   processDocsParams = {
     supabase: supabase,
@@ -415,7 +417,7 @@ async function initializeSupabaseAndOpenAIVariable(env: any) {
     octokit: new Octokit({ auth: env.GITHUB_AUTH_TOKEN }),
     repoOwner: 'aframevr',
     repoName: 'aframe',
-    pathToRepoDocuments: 'docs',
+    pathToRepoDocuments: 'docs/components/anchored.md',
     documentationFileExt: 'md',
     sectionDelimiter: '#',
     sourceDocumentationUrl: 'https://aframe.io/docs/master/'

@@ -32,7 +32,7 @@
     "src",
     "__tests__",
     "jest.config.js",
-    "rollup.config.js", "scripts/processDocs.js",
+    "rollup.config.js"
   ],
   "exclude": [
     "node_modules",
