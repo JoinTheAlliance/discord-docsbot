@@ -26,8 +26,8 @@ function printSectionizedDocument(
 ) {
   console.log(`https://aframe.io/docs/master/${docURL}\n`);
   sections.forEach((section, index) => {
-    console.log(`Section ${index + 1}:`);
-    console.log(section.trim() + '\n');
+    // console.log(`Section ${index + 1}:`);
+    // console.log(section.trim() + '\n');
   });
 }
   
@@ -44,18 +44,18 @@ function sectionizeDocument(
 ) {
   // Retrieve YAML header and extract out documentation url path.
   const yamlHeader = documentContent.match(/---\n([\s\S]+?)\n---/);
-  let documentationUrl = ""
-  if (yamlHeader) {
-      let section = yamlHeader[1].trim();
-      const matchResult = section.match(/source_code:\s*src\/(.+)/);
+  // let documentationUrl = ""
+  // if (yamlHeader) {
+  //     let section = yamlHeader[1].trim();
+  //     const matchResult = section.match(/source_code:\s*src\/(.+)/);
 
-      if (matchResult && matchResult[1]) {
-        documentationUrl = matchResult[1].trim().replace(/\.js$/, '');
-      } else {
-          // Handle the case where the match or the group [1] is null or undefined.
-          console.error('Unable to extract source code URL from YAML header:', section);
-      }
-  } 
+  //     if (matchResult && matchResult[1]) {
+  //       documentationUrl = matchResult[1].trim().replace(/\.js$/, '');
+  //     } else {
+  //         // Handle the case where the match or the group [1] is null or undefined.
+  //         console.error('Unable to extract source code URL from YAML header:', section);
+  //     }
+  // } 
 
   // Split the remaining content into sections based on the YAML header and delimiter.
   const delim = new RegExp(`\\n+${sectionDelimiter}+\\s+`);
@@ -64,9 +64,9 @@ function sectionizeDocument(
       .split(delim);
 
   // Debug
-  printSectionizedDocument(sections, documentationUrl);
+  //printSectionizedDocument(sections, documentationUrl);
 
-  return { sections: sections, urlPath: documentationUrl };
+  return { sections: sections };
 }
   
 /**
@@ -102,6 +102,8 @@ export async function vectorizeDocuments(
 
     response.data = Array.isArray(response.data) ? response.data : [response.data];
 
+    console.log('arra1: ', response.data.length)
+
     // Process documents in each directory.
     for (const resData of response.data) {
       let dirDocuments = [];
@@ -127,6 +129,7 @@ export async function vectorizeDocuments(
       } else {
         throw new Error('Repository URL does not exist!');
       }
+      //console.log(dirDocuments)
 
       // Retrieve document data for all docs to process.
       await Promise.all(
@@ -141,12 +144,12 @@ export async function vectorizeDocuments(
           })
 
           const decodedContent = Buffer.from((contentResponse.data as { content: string }).content, "base64").toString("utf-8");
-          const { sections, urlPath } = sectionizeDocument(
+          const { sections } = sectionizeDocument(
             decodedContent,
             sectionDelimiter
           );
-
-          generateEmbeddings(sections, sourceDocumentationUrl + urlPath, supabase, openai);
+          let updatedPath = document.path.replace("docs/", "");
+          await generateEmbeddings(sections, sourceDocumentationUrl + updatedPath, supabase, openai);
         })
       );
     }

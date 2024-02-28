@@ -26,7 +26,7 @@ export async function insertSummarization(document: string, sourceUrl: string, s
         throw error;
       }
 
-      console.log('successful insert', document)
+      console.log('successful insert')
   
       return data;
     } catch (error) {
