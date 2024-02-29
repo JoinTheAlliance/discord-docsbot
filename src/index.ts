@@ -309,7 +309,7 @@ router.post('/', async (request, env, event) => {
     );
 
     const message = {
-      content: { content: newContent, original_content: messageContent },
+      content: { content: newContent, original_content:  messageContent },
       senderId: userId,
       agentId,
       userIds: [userId, agentId],
@@ -355,7 +355,7 @@ router.post('/', async (request, env, event) => {
 
           console.log('Follow-up response status:', followUpResponse);
           const followUpData = await followUpResponse.json();
-          console.log('Follow-up response data:', followUpData);
+          // console.log('Follow-up response data:', followUpData.errors.content);
         } catch (error) {
           console.error('Error processing command:', error);
         }
@@ -417,7 +417,7 @@ async function initializeSupabaseAndOpenAIVariable(env: any) {
     octokit: new Octokit({ auth: env.GITHUB_AUTH_TOKEN }),
     repoOwner: 'aframevr',
     repoName: 'aframe',
-    pathToRepoDocuments: 'docs/components/anchored.md',
+    pathToRepoDocuments: 'docs',
     documentationFileExt: 'md',
     sectionDelimiter: '#',
     sourceDocumentationUrl: 'https://aframe.io/docs/master/'

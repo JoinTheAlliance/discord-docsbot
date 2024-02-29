@@ -6,19 +6,26 @@
  */
 export async function updateMessageContent(
   priorPromptKnowledgeFromDocs: any,
-  message: string,
+  message: any,
 ) {
   try {
-    // let promptHeader =
-    //   'Please use the following content to help answer the questions the user has: ';
-    // if (priorPromptKnowledgeFromDocs?.data?.length > 0) {
-    //   for (const obj of priorPromptKnowledgeFromDocs.data) {
-    //     const documentWithoutNewlines = obj.content.replace(/\n/g, ' ');
-    //     promptHeader += documentWithoutNewlines;
-    //   }
-    //   promptHeader += '\nThe users question is: ' + message;
-    // }
-    let promptHeader = '\nThe users question is: ' + message;
+    console.log('priorPromptKnowledgeFromDocs: ', priorPromptKnowledgeFromDocs)
+    let promptHeader =
+      'Please use the following content to help answer the questions the user has: ';
+    if (priorPromptKnowledgeFromDocs?.data?.length > 0) {
+      for (const obj of priorPromptKnowledgeFromDocs.data) {
+        const documentWithoutNewlines = obj.content.replace(/\n/g, ' ');
+        promptHeader += documentWithoutNewlines;
+      }
+    }
+    const userQuestionLength = message.length;
+    const remainingLength = 2000 - userQuestionLength;
+    promptHeader = promptHeader.substring(0, remainingLength);
+    promptHeader += '\nThe users question is: ' + message;
+
+
+    console.log('Message Content Original: ', message)
+    console.log('Message Content New: ', promptHeader)
 
     return promptHeader;
   } catch (error) {

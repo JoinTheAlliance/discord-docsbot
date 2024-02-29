@@ -29,6 +29,8 @@ export async function searchSimilarMessages(
       match_threshold: 0.6,
       match_count: 5,
     });
+
+    // console.log('Found docs: ', )
     return foundDocuments;
   } catch (error) {
     console.error('Error searching similar messages:', error);
