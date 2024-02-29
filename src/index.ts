@@ -191,7 +191,7 @@ router.get('/', (_request, env) => {
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 router.get('/refresh-docs', async (_request, _env) => {
   await initializeSupabaseAndOpenAIVariable(_env);
-  fetchLatestPullRequest(processDocsParams, '4995');
+  await fetchLatestPullRequest(processDocsParams, '4995');
 
   return new Response('Docs refreshed');
 });
@@ -337,9 +337,7 @@ router.post('/', async (request, env, event) => {
         try {
           const data = (await runtime.handleMessage(message)) as Content;
 
-          responseContent = `You asked: \`\`\`${
-            (message.content as Content).original_content
-          }\`\`\`\nAnswer: ${data.content}`;
+          responseContent = `You asked: ${(message.content as Content).original_content}\n\nAnswer: ${data.content}`;
           const followUpUrl = `https://discord.com/api/v10/webhooks/${env.DISCORD_APPLICATION_ID}/${interaction.token}/messages/@original`;
 
           // Send the follow-up message with the actual response

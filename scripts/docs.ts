@@ -180,7 +180,7 @@ export async function fetchLatestPullRequest(
     while (true) {
       console.log("ABOUT TO GET RESPONSE");
       
-      const response = await octokit.request('GET repos/{owner}/{repo}/pulls', {
+      const response = await octokit.request('GET /repos/{owner}/{repo}/pulls/{pull_number}/files', {
         owner: repoOwner,
         repo: repoName,
         pull_number: parseInt(pullRequestNum),
@@ -191,18 +191,18 @@ export async function fetchLatestPullRequest(
         }
       });
 
-      console.log("RESPONSE LENGTH: " + response.data.length);
-      if (response.data.length > 0) {
-        await Promise.all(response.data.map(async (filePath: any) => {
-          if (filePath.filename.includes(`${pathToRepoDocuments}/`)) {
-            await vectorizeDocuments(params);
-          }
-        }));
-        page++;
-      } else {
-        // No more files, exit the loop
-        break;
-      }
+      console.log("RESPONSE LENGTH: " + JSON.stringify(response.data));
+      console.log("test2", response.data.length)
+
+      await Promise.all(response.data.map(async (filePath: any) => {
+        console.log('filePath:', filePath)
+        if (filePath.filename.includes(`${pathToRepoDocuments}/`)) {
+          params.pathToRepoDocuments = filePath.filename;
+          await vectorizeDocuments(params);
+        }
+      }));
+      
+      break;
     }
   } catch (error) {
     console.error('Error fetching data from GitHub API:', error);

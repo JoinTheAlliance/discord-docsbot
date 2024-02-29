@@ -23,7 +23,6 @@ export async function updateMessageContent(
     promptHeader = promptHeader.substring(0, remainingLength);
     promptHeader += '\nThe users question is: ' + message;
 
-
     console.log('Message Content Original: ', message)
     console.log('Message Content New: ', promptHeader)
 
