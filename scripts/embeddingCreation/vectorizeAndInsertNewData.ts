@@ -15,7 +15,7 @@ export async function insertSummarization(document: string, sourceUrl: string, s
   
       // Insert into Supabase table
       const { data, error } = await supabase
-        .from('summarizations')
+        .from('facts')
         .insert({
           content: document,
           embedding: embeddingResponse.data[0].embedding,

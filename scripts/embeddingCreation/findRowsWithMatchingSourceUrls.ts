@@ -4,7 +4,7 @@ import { SupabaseClient } from '@supabase/supabase-js';
 export async function findMatchingRows(sourceUrl: string, supabase: SupabaseClient) {
     try {
       const { data, error } = await supabase
-      .from('summarizations')
+      .from('facts')
       .select()
       .contains('meta_data', { "sourceUrl": sourceUrl });
   

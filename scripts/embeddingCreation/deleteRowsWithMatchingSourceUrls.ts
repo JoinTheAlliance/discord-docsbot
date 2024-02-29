@@ -4,7 +4,7 @@ import { SupabaseClient } from '@supabase/supabase-js';
 export async function deleteMatchingRecords(sourceUrl: string, supabase: SupabaseClient) {
     try {
       const { data, error } = await supabase
-        .from('summarizations')
+        .from('facts')
         .delete()
         .contains('meta_data', { "sourceUrl": sourceUrl });
   
