@@ -198,15 +198,15 @@ router.get('/refresh-docs', async (request, _env) => {
   await initializeSupabaseAndOpenAIVariable(_env);
   await fetchLatestPullRequest(processDocsParams, pullRequestNumber);
 
-  return new Response('Docs refreshed');
+  return new Response('Docs from pull request refreshed');
 });
 
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
-router.get('/refresh-docs2', async (_request, _env) => {
+router.get('/refresh-all-docs', async (_request, _env) => {
   await initializeSupabaseAndOpenAIVariable(_env);
   await vectorizeDocuments(processDocsParams);
 
-  return new Response('Docs refreshed');
+  return new Response('All docs refreshed');
 });
 
 /**
@@ -406,12 +406,17 @@ const server = {
 };
 
 async function initializeSupabaseAndOpenAIVariable(env: any) {
-  openai = initializeOpenAi(env.OPENAI_API_KEY);
-  // Initialize Supabase
-  supabase = initializeSupabase(
-    env.SUPABASE_URL,
-    env.SUPABASE_SERVICE_API_KEY
-  );
+  if (openai) {
+    openai = initializeOpenAi(env.OPENAI_API_KEY);
+  }
+
+  if (supabase) {
+    // Initialize Supabase
+    supabase = initializeSupabase(
+      env.SUPABASE_URL,
+      env.SUPABASE_SERVICE_API_KEY
+    );
+  }
 
   // Establish parameters for processing documentation.
   processDocsParams = {
