@@ -189,9 +189,14 @@ router.get('/', (_request, env) => {
 });
 
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
-router.get('/refresh-docs', async (_request, _env) => {
+router.get('/refresh-docs', async (request, _env) => {
+  const pullRequestNumber: string = request.query.pr_number?.toString() ?? '';
+  if (!pullRequestNumber) {
+    return new Response('Pull request number is required', { status: 400 });
+  }
+
   await initializeSupabaseAndOpenAIVariable(_env);
-  await fetchLatestPullRequest(processDocsParams, '4995');
+  await fetchLatestPullRequest(processDocsParams, pullRequestNumber);
 
   return new Response('Docs refreshed');
 });
