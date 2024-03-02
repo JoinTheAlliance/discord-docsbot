@@ -26,7 +26,7 @@ export async function searchSimilarMessages(
     // Query the Supabase table
     const foundDocuments = await supabase.rpc('match_documents', {
       query_embedding: newVector,
-      match_threshold: 0.8,
+      match_threshold: 0.65,
       match_count: 5,
     });
 

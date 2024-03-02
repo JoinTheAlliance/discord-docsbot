@@ -314,12 +314,14 @@ router.post('/', async (request, env, event) => {
     );
 
     const message = {
-      content: { content: newContent?.promptHeader, original_content:  messageContent },
+      content: { content: newContent?.promptHeader },
       senderId: userId,
       agentId,
       userIds: [userId, agentId],
       room_id,
     } as unknown as Message;
+
+    console.log('final message: ', message)
 
     const runtime = new BgentRuntime({
       debugMode: true,
@@ -342,7 +344,7 @@ router.post('/', async (request, env, event) => {
         try {
           const data = (await runtime.handleMessage(message)) as Content;
 
-          responseContent = `> ${(message.content as Content).original_content}\n\n**${data.content}**`;
+          responseContent = `> ${messageContent}\n\n**${data.content}**`;
 
           let newContentLength = newContent?.sourceUrls?.length ?? 0
           if (newContentLength > 0) {
@@ -368,7 +370,7 @@ router.post('/', async (request, env, event) => {
 
           console.log('Follow-up response status:', followUpResponse);
           const followUpData = await followUpResponse.json();
-          // console.log('Follow-up response data:', followUpData.errors.content);
+          console.log('Follow-up response data:', followUpData?.errors?.content);
         } catch (error) {
           console.error('Error processing command:', error);
         }

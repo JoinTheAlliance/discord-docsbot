@@ -9,27 +9,37 @@ export async function updateMessageContent(
   message: any,
 ) {
   try {
-    let sourceUrls: Array<string> = [];
+    console.log("Message coming into updateMessageContent: ", message)
+    const uniqueUrls: Set<string> = new Set();
+
     console.log('priorPromptKnowledgeFromDocs: ', priorPromptKnowledgeFromDocs)
-    let promptHeader =
-      '\nPlease use the following content to help answer the questions the user has: ';
+    let promptHeader = "";
+
+    promptHeader += "From now on, you are an assistant that is only knowledgeable on the A-Frame web framework (https://aframe.io/). If any question is not related to A-Frame, give me a standardized response that tells me you only assist with A-Frame related questions."
+
+    // Add users question
+    promptHeader += `Question: ${message}`;
+
     if (priorPromptKnowledgeFromDocs?.data?.length > 0) {
+      promptHeader += 'Information to help answer question: ';
+
       for (const obj of priorPromptKnowledgeFromDocs.data) {
         const documentWithoutNewlines = obj.content.replace(/\n/g, ' ');
         promptHeader += documentWithoutNewlines;
-        console.log('URLS: ', obj.sourceurl)
-        sourceUrls.push(obj.sourceurl)
+        console.log('URLS: ', obj.sourceurl);
+        uniqueUrls.add(obj.sourceurl);
       }
     }
-    const userQuestionLength = message.length;
-    const remainingLength = 2000 - userQuestionLength;
-    promptHeader = promptHeader.substring(0, remainingLength);
-    promptHeader += '\nThe users question is: ' + message;
+    // const userQuestionLength = message.length;
+    const remainingLength = 2000 - message.length;
+    //promptHeader = promptHeader.substring(0, remainingLength);
 
     console.log('Message Content Original: ', message)
     console.log('Message Content New: ', promptHeader)
+    const sourceUrls: string[] = Array.from(uniqueUrls);
+    const trimmedPromptHeader = promptHeader.substring(0, remainingLength)
 
-    return {promptHeader: promptHeader, sourceUrls: sourceUrls};
+    return {"promptHeader": trimmedPromptHeader, "sourceUrls": sourceUrls};
   } catch (error) {
     console.error('Error updating message content:', error);
     return null;
