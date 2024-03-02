@@ -27,6 +27,7 @@ import { initializeSupabase } from '../scripts/supabaseHelperFunctions';
 let openai: OpenAI;
 let supabase: SupabaseClient;
 let processDocsParams: ProcessDocsParams;
+let resetProcessDocsParams = true;
 
 // Add this function to fetch the bot's name
 async function fetchBotName(botToken: string) {
@@ -192,13 +193,14 @@ router.get('/', (_request, env) => {
 router.get('/refresh-docs', async (request, _env) => {
   const pullRequestNumber: string = request.query.pr_number?.toString() ?? '';
   if (!pullRequestNumber) {
-    return new Response('Pull request number is required', { status: 400 });
+    return new Response('Pull request number is required.', { status: 400 });
   }
 
   await initializeSupabaseAndOpenAIVariable(_env);
   await fetchLatestPullRequest(processDocsParams, pullRequestNumber);
+  resetProcessDocsParams = true;
 
-  return new Response('Docs from pull request refreshed');
+  return new Response(`Docs from pull request #${pullRequestNumber} refreshed.`);
 });
 
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -206,7 +208,7 @@ router.get('/refresh-all-docs', async (_request, _env) => {
   await initializeSupabaseAndOpenAIVariable(_env);
   await vectorizeDocuments(processDocsParams);
 
-  return new Response('All docs refreshed');
+  return new Response('All docs refreshed.');
 });
 
 /**
@@ -432,18 +434,21 @@ async function initializeSupabaseAndOpenAIVariable(env: any) {
   }
 
   // Establish parameters for processing documentation.
-  processDocsParams = {
-    supabase: supabase,
-    openai: openai,
-    octokit: new Octokit({ auth: env.GITHUB_AUTH_TOKEN }),
-    repoOwner: 'aframevr',
-    repoName: 'aframe',
-    pathToRepoDocuments: 'docs',
-    documentationFileExt: 'md',
-    sectionDelimiter: '#',
-    sourceDocumentationUrl: 'https://aframe.io/docs/master/'
-  };  
-  return { supabaseClient: supabase, openAiClient: openai, processDocParameters: processDocsParams };
+  if (resetProcessDocsParams) {
+    processDocsParams = {
+      supabase: supabase,
+      openai: openai,
+      octokit: new Octokit({ auth: env.GITHUB_AUTH_TOKEN }),
+      repoOwner: 'blinKAlliance',
+      repoName: 'aframe',
+      pathToRepoDocuments: 'docs',
+      documentationFileExt: 'md',
+      sectionDelimiter: '#',
+      sourceDocumentationUrl: 'https://aframe.io/docs/master/'
+    };
+
+    resetProcessDocsParams = false;
+  }
 }
 
 export default server;

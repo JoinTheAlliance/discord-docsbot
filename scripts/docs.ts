@@ -18,16 +18,13 @@ export interface ProcessDocsParams {
 /**
  * Prints the documentation URL and sections for a document. Used for testing.
  * @param {string[]} sections - All the sections from a document.
- * @param {string} docURL - The URL where the documentation is located.
  */
 function printSectionizedDocument(
   sections: string[],
-  docURL: string
 ) {
-  console.log(`https://aframe.io/docs/master/${docURL}\n`);
   sections.forEach((section, index) => {
-    // console.log(`Section ${index + 1}:`);
-    // console.log(section.trim() + '\n');
+    console.log(`Section ${index + 1}:`);
+    console.log(section.trim() + '\n');
   });
 }
   
@@ -52,7 +49,7 @@ function sectionizeDocument(
       .split(delim);
 
   // Debug
-  //printSectionizedDocument(sections, documentationUrl);
+  //printSectionizedDocument(sections);
 
   return { sections: sections };
 }
@@ -90,8 +87,6 @@ export async function vectorizeDocuments(
 
     response.data = Array.isArray(response.data) ? response.data : [response.data];
 
-    console.log('arra1: ', response.data.length)
-
     // Process documents in each directory.
     for (const resData of response.data) {
       let dirDocuments = [];
@@ -117,7 +112,6 @@ export async function vectorizeDocuments(
       } else {
         throw new Error('Repository URL does not exist!');
       }
-      //console.log(dirDocuments)
 
       // Retrieve document data for all docs to process.
       await Promise.all(
@@ -166,8 +160,6 @@ export async function fetchLatestPullRequest(
     let page = 1;
 
     while (true) {
-      console.log("ABOUT TO GET RESPONSE");
-      
       const response = await octokit.request('GET /repos/{owner}/{repo}/pulls/{pull_number}/files', {
         owner: repoOwner,
         repo: repoName,
@@ -179,11 +171,7 @@ export async function fetchLatestPullRequest(
         }
       });
 
-      console.log("RESPONSE LENGTH: " + JSON.stringify(response.data));
-      console.log("test2", response.data.length)
-
       await Promise.all(response.data.map(async (filePath: any) => {
-        console.log('filePath:', filePath)
         if (filePath.filename.includes(`${pathToRepoDocuments}/`)) {
           params.pathToRepoDocuments = filePath.filename;
           await vectorizeDocuments(params);
