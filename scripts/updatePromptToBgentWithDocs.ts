@@ -20,16 +20,16 @@ export async function updateMessageContent(
     // Add users question
     promptHeader += `Question: ${message}`;
 
-    if (priorPromptKnowledgeFromDocs?.data?.length > 0) {
-      promptHeader += 'Information to help answer question: ';
+    // if (priorPromptKnowledgeFromDocs?.data?.length > 0) {
+      //promptHeader += 'Information to help answer question: ';
 
       for (const obj of priorPromptKnowledgeFromDocs.data) {
         const documentWithoutNewlines = obj.content.replace(/\n/g, ' ');
         promptHeader += documentWithoutNewlines;
-        console.log('URLS: ', obj.sourceurl);
+        // console.log('URLS: ', obj.sourceurl);
         uniqueUrls.add(obj.sourceurl);
       }
-    }
+    // }
     // const userQuestionLength = message.length;
     const remainingLength = 2000 - message.length;
     //promptHeader = promptHeader.substring(0, remainingLength);

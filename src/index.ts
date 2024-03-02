@@ -282,11 +282,12 @@ router.post('/', async (request, env, event) => {
     interaction.data.name === TEST_COMMAND.name
   ) {
 
-    const userId = getUuid(interaction.member.user.id) as UUID;
-    const userName = interaction.member.user.username;
+    const userId = getUuid(interaction?.member?.user?.id) as UUID;
+    const userName = interaction?.member?.user?.username;
     const agentId = getUuid(env.DISCORD_APPLICATION_ID) as UUID;
     const room_id = getUuid(interaction.channel_id) as UUID;
 
+    console.log('User info: ', interaction?.member?.user)
     console.log('got ids');
 
     // // Ensure all necessary records exist in Supabase
@@ -344,7 +345,7 @@ router.post('/', async (request, env, event) => {
         try {
           const data = (await runtime.handleMessage(message)) as Content;
 
-          responseContent = `> ${messageContent}\n\n**${data.content}**`;
+          responseContent = `> ${messageContent}\n\n**<@${interaction?.member?.user?.id}> ${data.content}**`;
 
           let newContentLength = newContent?.sourceUrls?.length ?? 0
           if (newContentLength > 0) {

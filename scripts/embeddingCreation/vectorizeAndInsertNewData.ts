@@ -9,7 +9,7 @@ export async function insertSummarization(document: string, sourceUrl: string, s
 
       // Embedding creation
       const embeddingResponse = await openai.embeddings.create({
-        model: 'text-embedding-ada-002',
+        model: 'text-embedding-3-small',
         input: documentWithoutNewlines,
       });
   
