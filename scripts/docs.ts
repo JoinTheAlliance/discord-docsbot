@@ -44,18 +44,6 @@ function sectionizeDocument(
 ) {
   // Retrieve YAML header and extract out documentation url path.
   const yamlHeader = documentContent.match(/---\n([\s\S]+?)\n---/);
-  // let documentationUrl = ""
-  // if (yamlHeader) {
-  //     let section = yamlHeader[1].trim();
-  //     const matchResult = section.match(/source_code:\s*src\/(.+)/);
-
-  //     if (matchResult && matchResult[1]) {
-  //       documentationUrl = matchResult[1].trim().replace(/\.js$/, '');
-  //     } else {
-  //         // Handle the case where the match or the group [1] is null or undefined.
-  //         console.error('Unable to extract source code URL from YAML header:', section);
-  //     }
-  // } 
 
   // Split the remaining content into sections based on the YAML header and delimiter.
   const delim = new RegExp(`\\n+${sectionDelimiter}+\\s+`);
@@ -201,7 +189,7 @@ export async function fetchLatestPullRequest(
           await vectorizeDocuments(params);
         }
       }));
-      
+
       break;
     }
   } catch (error) {

@@ -314,7 +314,7 @@ router.post('/', async (request, env, event) => {
     );
 
     const message = {
-      content: { content: newContent, original_content:  messageContent },
+      content: { content: newContent?.promptHeader, original_content:  messageContent },
       senderId: userId,
       agentId,
       userIds: [userId, agentId],
@@ -342,7 +342,17 @@ router.post('/', async (request, env, event) => {
         try {
           const data = (await runtime.handleMessage(message)) as Content;
 
-          responseContent = `You asked: ${(message.content as Content).original_content}\n\nAnswer: ${data.content}`;
+          responseContent = `> ${(message.content as Content).original_content}\n\n**${data.content}**`;
+
+          let newContentLength = newContent?.sourceUrls?.length ?? 0
+          if (newContentLength > 0) {
+            responseContent += "\n\nRelated documentation links:\n";
+            for (let i = 0; i < newContentLength; i++) {
+              const htmlLink = newContent?.sourceUrls[i].replace(/\.md/g, ".html");
+              responseContent += `- <${htmlLink}>\n`
+            }
+          }
+
           const followUpUrl = `https://discord.com/api/v10/webhooks/${env.DISCORD_APPLICATION_ID}/${interaction.token}/messages/@original`;
 
           // Send the follow-up message with the actual response
@@ -406,11 +416,11 @@ const server = {
 };
 
 async function initializeSupabaseAndOpenAIVariable(env: any) {
-  if (openai) {
+  if (!openai) {
     openai = initializeOpenAi(env.OPENAI_API_KEY);
   }
 
-  if (supabase) {
+  if (!supabase) {
     // Initialize Supabase
     supabase = initializeSupabase(
       env.SUPABASE_URL,

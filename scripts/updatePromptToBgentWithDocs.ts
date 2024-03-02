@@ -9,13 +9,16 @@ export async function updateMessageContent(
   message: any,
 ) {
   try {
+    let sourceUrls: Array<string> = [];
     console.log('priorPromptKnowledgeFromDocs: ', priorPromptKnowledgeFromDocs)
     let promptHeader =
-      'Please use the following content to help answer the questions the user has: ';
+      '\nPlease use the following content to help answer the questions the user has: ';
     if (priorPromptKnowledgeFromDocs?.data?.length > 0) {
       for (const obj of priorPromptKnowledgeFromDocs.data) {
         const documentWithoutNewlines = obj.content.replace(/\n/g, ' ');
         promptHeader += documentWithoutNewlines;
+        console.log('URLS: ', obj.sourceurl)
+        sourceUrls.push(obj.sourceurl)
       }
     }
     const userQuestionLength = message.length;
@@ -26,7 +29,7 @@ export async function updateMessageContent(
     console.log('Message Content Original: ', message)
     console.log('Message Content New: ', promptHeader)
 
-    return promptHeader;
+    return {promptHeader: promptHeader, sourceUrls: sourceUrls};
   } catch (error) {
     console.error('Error updating message content:', error);
     return null;
