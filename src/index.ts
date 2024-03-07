@@ -2,8 +2,18 @@
  * The core server that runs on a Cloudflare worker.
  */
 
-import { SupabaseClient, createClient } from '@supabase/supabase-js';
-import { BgentRuntime, wait, type Message, type Content } from 'bgent';
+import { SupabaseClient } from '@supabase/supabase-js';
+import {
+  BgentRuntime,
+  wait,
+  type Message,
+  type Content,
+  embeddingZeroVector,
+  State,
+  parseJSONObjectFromText,
+  composeContext,
+  messageHandlerTemplate,
+} from 'bgent';
 import { UUID } from 'crypto';
 import {
   InteractionResponseType,
@@ -11,11 +21,158 @@ import {
   verifyKey,
 } from 'discord-interactions';
 import { Router } from 'itty-router';
-// import { processDocs } from 'processDocs';
+import {
+  ProcessDocsParams,
+  vectorizeDocuments,
+  fetchLatestPullRequest,
+} from './docs';
 import getUuid from 'uuid-by-string';
+import { Octokit } from 'octokit';
 import { OpenAI } from 'openai';
-import { searchSimilarMessages } from '../scripts/searchForSimilarVectorizedDocs';
-import { updateMessageContent } from '../scripts/updatePromptToBgentWithDocs';
+import { searchSimilarMessages } from './searchForSimilarVectorizedDocs';
+import { updateMessageContent } from './updatePromptToBgentWithDocs';
+import { initializeOpenAi } from './openAiHelperFunctions';
+import { initializeSupabase } from './supabaseHelperFunctions';
+import { BodyInit } from 'openai/_shims';
+
+let openai: OpenAI;
+let supabase: SupabaseClient;
+let processDocsParams: ProcessDocsParams;
+let resetProcessDocsParams = true;
+
+/**
+ * Handle an incoming message, processing it and returning a response.
+ * @param message The message to handle.
+ * @param state The state of the agent.
+ * @returns The response to the message.
+ */
+async function handleMessage(
+  runtime: BgentRuntime,
+  message: Message,
+  state?: State,
+) {
+  const _saveRequestMessage = async (message: Message, state: State) => {
+    const { content: senderContent /* senderId, userIds, room_id */ } = message;
+
+    // we run evaluation here since some evals could be modulo based, and we should run on every message
+    if ((senderContent as Content).content) {
+      const { data: data2, error } = await runtime.supabase
+        .from('messages')
+        .select('*')
+        .eq('user_id', message.senderId)
+        .eq('room_id', room_id)
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        console.log('error', error);
+        // TODO: dont need this recall
+      } else if (data2.length > 0 && data2[0].content === message.content) {
+        console.log('already saved', data2);
+      } else {
+        await runtime.messageManager.createMemory({
+          user_ids: [message.senderId, message.agentId, ...message.userIds],
+          user_id: senderId!,
+          content: senderContent,
+          room_id,
+          embedding: embeddingZeroVector,
+        });
+      }
+      await runtime.evaluate(message, state);
+    }
+  };
+
+  await _saveRequestMessage(message, state as State);
+  // if (!state) {
+  state = (await runtime.composeState(message)) as State;
+  // }
+
+  const context = composeContext({
+    state,
+    template: messageHandlerTemplate,
+  });
+
+  if (runtime.debugMode) {
+    console.log(context, 'Response Context');
+  }
+
+  let responseContent: Content | null = null;
+  const { senderId, room_id, userIds: user_ids, agentId } = message;
+
+  for (let triesLeft = 3; triesLeft > 0; triesLeft--) {
+    console.log(context);
+    const response = await runtime.completion({
+      context,
+      stop: [],
+    });
+
+    runtime.supabase
+      .from('logs')
+      .insert({
+        body: { message, context, response },
+        user_id: senderId,
+        room_id,
+        user_ids: user_ids!,
+        agent_id: agentId!,
+        type: 'main_completion',
+      })
+      .then(({ error }) => {
+        if (error) {
+          console.error('error', error);
+        }
+      });
+
+    const parsedResponse = parseJSONObjectFromText(
+      response,
+    ) as unknown as Content;
+
+    if (
+      (parsedResponse.user as string)?.includes(
+        (state as State).agentName as string,
+      )
+    ) {
+      responseContent = {
+        content: parsedResponse.content,
+        action: parsedResponse.action,
+      };
+      break;
+    }
+  }
+
+  if (!responseContent) {
+    responseContent = {
+      content: '',
+      action: 'IGNORE',
+    };
+  }
+
+  const _saveResponseMessage = async (
+    message: Message,
+    state: State,
+    responseContent: Content,
+  ) => {
+    const { agentId, userIds, room_id } = message;
+
+    responseContent.content = responseContent.content?.trim();
+
+    if (responseContent.content) {
+      await runtime.messageManager.createMemory({
+        user_ids: userIds!,
+        user_id: agentId!,
+        content: responseContent,
+        room_id,
+        embedding: embeddingZeroVector,
+      });
+      await runtime.evaluate(message, { ...state, responseContent });
+    } else {
+      console.warn('Empty response, skipping');
+    }
+  };
+
+  await _saveResponseMessage(message, state, responseContent);
+  await runtime.processActions(message, responseContent);
+
+  return responseContent;
+}
 
 // Add this function to fetch the bot's name
 async function fetchBotName(botToken: string) {
@@ -32,7 +189,10 @@ async function fetchBotName(botToken: string) {
     throw new Error(`Error fetching bot details: ${response.statusText}`);
   }
 
-  const data = await response.json();
+  const data = (await response.json()) as {
+    username: string;
+    discriminator: string;
+  };
   return data.username; // Or data.tag for username#discriminator
 }
 
@@ -178,9 +338,27 @@ router.get('/', (_request, env) => {
 });
 
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
-router.get('/docs', async (_request, _env) => {
-  //await processDocs();
-  return new Response('Docs processed');
+router.get('/refresh-docs', async (request, _env) => {
+  const pullRequestNumber: string = request.query.pr_number?.toString() ?? '';
+  if (!pullRequestNumber) {
+    return new Response('Pull request number is required.', { status: 400 });
+  }
+
+  await initializeSupabaseAndOpenAIVariable(_env);
+  await fetchLatestPullRequest(processDocsParams, pullRequestNumber);
+  resetProcessDocsParams = true;
+
+  return new Response(
+    `Docs from pull request #${pullRequestNumber} refreshed.`,
+  );
+});
+
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+router.get('/refresh-all-docs', async (_request, _env) => {
+  await initializeSupabaseAndOpenAIVariable(_env);
+  await vectorizeDocuments(processDocsParams);
+
+  return new Response('All docs refreshed.');
 });
 
 /**
@@ -232,25 +410,6 @@ router.get('/commands', async (_request, env) => {
 });
 
 /**
- * Refresh the docs
- */
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-router.get('/refreshDocs', async (_request, env) => {
-  const token = env.DISCORD_TOKEN;
-  const applicationId = env.DISCORD_APPLICATION_ID;
-  if (!token) {
-    throw new Error('The DISCORD_TOKEN environment variable is required.');
-  }
-  if (!applicationId) {
-    throw new Error(
-      'The DISCORD_APPLICATION_ID environment variable is required.',
-    );
-  }
-
-  return new Response('Docs refreshed');
-});
-
-/**
  * Main route for all requests sent from Discord.  All incoming messages will
  * include a JSON payload described here:
  * https://discord.com/developers/docs/interactions/receiving-and-responding#interaction-object
@@ -260,9 +419,6 @@ router.post('/', async (request, env, event) => {
     request,
     env,
   );
-
-  const OPENAI_API_KEY = env.OPENAI_API_KEY;
-  const openai = new OpenAI({ apiKey: OPENAI_API_KEY });
 
   if (!isValid || !interaction) {
     return new Response('Bad request signature.', { status: 401 });
@@ -277,24 +433,16 @@ router.post('/', async (request, env, event) => {
     interaction.type === InteractionType.APPLICATION_COMMAND &&
     interaction.data.name === TEST_COMMAND.name
   ) {
-    const supabase = createClient(
-      env.SUPABASE_URL,
-      env.SUPABASE_SERVICE_API_KEY,
-      {
-        auth: { persistSession: false },
-      },
-    );
-
-    console.log('created supabase');
-
-    const userId = getUuid(interaction.member.user.id) as UUID;
-    const userName = interaction.member.user.username;
+    const userId = getUuid(interaction?.member?.user?.id) as UUID;
+    const userName = interaction?.member?.user?.username;
     const agentId = getUuid(env.DISCORD_APPLICATION_ID) as UUID;
     const room_id = getUuid(interaction.channel_id) as UUID;
 
+    console.log('User info: ', interaction?.member?.user);
     console.log('got ids');
 
     // // Ensure all necessary records exist in Supabase
+    await initializeSupabaseAndOpenAIVariable(env);
     await ensureUserExists(supabase, agentId, null, env.DISCORD_TOKEN);
     console.log('ensured user exists');
     await ensureUserExists(supabase, userId, userName);
@@ -311,18 +459,21 @@ router.post('/', async (request, env, event) => {
       supabase,
       openai,
     );
+
     const newContent = await updateMessageContent(
       priorPromptKnowledgeFromDocs,
       messageContent,
     );
 
     const message = {
-      content: { content: newContent, original_content: messageContent },
+      content: { content: newContent?.promptHeader },
       senderId: userId,
       agentId,
       userIds: [userId, agentId],
       room_id,
     } as unknown as Message;
+
+    console.log('final message: ', message);
 
     const runtime = new BgentRuntime({
       debugMode: true,
@@ -343,11 +494,22 @@ router.post('/', async (request, env, event) => {
       (async () => {
         let responseContent = 'How can I assist you with A-Frame?'; // Default response
         try {
-          const data = (await runtime.handleMessage(message)) as Content;
+          const data = (await handleMessage(runtime, message)) as Content;
 
-          responseContent = `You asked: \`\`\`${
-            (message.content as Content).original_content
-          }\`\`\`\nAnswer: ${data.content}`;
+          responseContent = `> ${messageContent}\n\n**<@${interaction?.member?.user?.id}> ${data.content}**`;
+
+          const newContentLength = newContent?.sourceUrls?.length ?? 0;
+          if (newContentLength > 0) {
+            responseContent += '\n\nRelated documentation links:\n';
+            for (let i = 0; i < newContentLength; i++) {
+              const htmlLink = newContent?.sourceUrls[i].replace(
+                /\.md/g,
+                '.html',
+              );
+              responseContent += `- <${htmlLink}>\n`;
+            }
+          }
+
           const followUpUrl = `https://discord.com/api/v10/webhooks/${env.DISCORD_APPLICATION_ID}/${interaction.token}/messages/@original`;
 
           // Send the follow-up message with the actual response
@@ -362,8 +524,13 @@ router.post('/', async (request, env, event) => {
           });
 
           console.log('Follow-up response status:', followUpResponse);
-          const followUpData = await followUpResponse.json();
-          console.log('Follow-up response data:', followUpData);
+          const followUpData = (await followUpResponse.json()) as {
+            errors: { content: string };
+          };
+          console.log(
+            'Follow-up response data:',
+            followUpData?.errors?.content,
+          );
         } catch (error) {
           console.error('Error processing command:', error);
         }
@@ -409,5 +576,39 @@ const server = {
     return router.handle(request, env, event);
   },
 };
+
+async function initializeSupabaseAndOpenAIVariable(env: {
+  [key: string]: string;
+}) {
+  if (!openai) {
+    openai = initializeOpenAi(env.OPENAI_API_KEY);
+  }
+
+  if (!supabase) {
+    // Initialize Supabase
+    supabase = initializeSupabase(
+      env.SUPABASE_URL,
+      env.SUPABASE_SERVICE_API_KEY,
+    );
+  }
+
+  // Establish parameters for processing documentation.
+  if (resetProcessDocsParams) {
+    processDocsParams = {
+      supabase: supabase,
+      openai: openai,
+      octokit: new Octokit({ auth: env.GITHUB_AUTH_TOKEN }),
+      repoOwner: process.env.REPO_OWNER ?? 'aframevr',
+      repoName: process.env.REPO_NAME ?? 'aframe',
+      pathToRepoDocuments: 'docs',
+      documentationFileExt: 'md',
+      sectionDelimiter: '#',
+      sourceDocumentationUrl:
+        process.env.DOCUMENTATION_URL ?? 'https://aframe.io/docs/master/',
+    };
+
+    resetProcessDocsParams = false;
+  }
+}
 
 export default server;

@@ -1,15 +1,15 @@
-/* eslint-disable no-undef */
 import s from '@supabase/supabase-js';
-const { SupabaseClient } = s;
+import { BgentRuntime, addLore } from 'bgent';
 import dotenv from 'dotenv';
+import { PathLike } from 'fs';
 import fs from 'fs/promises';
 import path from 'path';
-import { BgentRuntime, addLore } from 'bgent/dist/index.esm.js';
+const { SupabaseClient } = s;
 dotenv.config({ path: '.dev.vars' });
 
 const SUPABASE_URL =
   process.env.SUPABASE_URL ?? 'https://rnxwpsbkzcugmqauwdax.supabase.co';
-const SUPABASE_SERVICE_API_KEY = process.env.SUPABASE_SERVICE_API_KEY;
+const SUPABASE_SERVICE_API_KEY = process.env.SUPABASE_SERVICE_API_KEY as string;
 const SERVER_URL = 'https://api.openai.com/v1';
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 
@@ -24,13 +24,13 @@ const runtime = new BgentRuntime({
   debugMode: process.env.NODE_ENV === 'development',
   supabase,
   serverUrl: SERVER_URL,
-  token: OPENAI_API_KEY,
+  token: OPENAI_API_KEY as string,
   actions: [],
   evaluators: [],
 });
 
 // Function to process each Markdown file
-const processDocument = async (filePath) => {
+const processDocument = async (filePath: PathLike | fs.FileHandle) => {
   console.log(`Processing file: ${filePath}`);
 
   // Read the markdown file
@@ -46,13 +46,13 @@ const processDocument = async (filePath) => {
     .trim();
 
   // Function to split content by headings and ensure chunks are not too large or empty
-  const splitContent = (content, separator) => {
+  const splitContent = (content: string, separator: string) => {
     const sections = content
       .split(new RegExp(`(?=^${separator})`, 'gm'))
       .filter(Boolean); // Split and keep the separator
-    let chunks = [];
+    const chunks: string[] = [];
 
-    sections.forEach((section) => {
+    sections.forEach((section: string) => {
       chunks.push(section.trim());
     });
 
@@ -60,7 +60,7 @@ const processDocument = async (filePath) => {
   };
 
   // Check for large sections without any headings and split them first
-  let chunks = [markdown.replaceAll('\n\n', '\n')];
+  let chunks = [markdown.split('\n\n').join('\n')];
 
   // Then, try to split by headings if applicable
   ['# ', '## '].forEach((heading) => {
@@ -92,9 +92,9 @@ const processDocument = async (filePath) => {
         // await fs.appendFile('output.log', '***** ' + filePath + '\n\n' + chunk + '\n*****');
         await addLore({
           runtime,
-          source: filePath.replace(startingPath, ''),
-          content: chunk,
-          embedContent: chunk,
+          source: (filePath as string).replace(startingPath, ''),
+          content: { content: chunk },
+          embedContent: { content: chunk },
         });
         // wait for 250 ms
         await new Promise((resolve) => setTimeout(resolve, 100));
@@ -108,7 +108,7 @@ const processDocument = async (filePath) => {
 };
 
 // Asynchronous function to recursively find .md files and process them, ignoring specified directories
-const findAndProcessMarkdownFiles = async (dirPath) => {
+const findAndProcessMarkdownFiles = async (dirPath: PathLike) => {
   try {
     const filesAndDirectories = await fs.readdir(dirPath, {
       withFileTypes: true,
@@ -116,7 +116,7 @@ const findAndProcessMarkdownFiles = async (dirPath) => {
 
     // Iterate over all items in the directory
     for (const dirent of filesAndDirectories) {
-      const fullPath = path.join(dirPath, dirent.name);
+      const fullPath = path.join(dirPath as string, dirent.name);
 
       // Skip 'node_modules' and 'static' directories
       if (

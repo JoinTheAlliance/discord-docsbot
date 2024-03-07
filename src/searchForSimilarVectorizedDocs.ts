@@ -16,7 +16,7 @@ export async function searchSimilarMessages(
   try {
     // Embedding creation
     const embeddingResponse = await openai.embeddings.create({
-      model: 'text-embedding-ada-002',
+      model: 'text-embedding-3-small',
       input: message,
     });
 
@@ -29,6 +29,8 @@ export async function searchSimilarMessages(
       match_threshold: 0.6,
       match_count: 5,
     });
+
+    console.log('Found docs: ', foundDocuments);
     return foundDocuments;
   } catch (error) {
     console.error('Error searching similar messages:', error);
