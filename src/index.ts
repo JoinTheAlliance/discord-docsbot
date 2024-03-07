@@ -3,7 +3,17 @@
  */
 
 import { SupabaseClient } from '@supabase/supabase-js';
-import { BgentRuntime, wait, type Message, type Content } from 'bgent';
+import {
+  BgentRuntime,
+  wait,
+  type Message,
+  type Content,
+  embeddingZeroVector,
+  State,
+  parseJSONObjectFromText,
+  composeContext,
+  messageHandlerTemplate,
+} from 'bgent';
 import { UUID } from 'crypto';
 import {
   InteractionResponseType,
@@ -29,6 +39,140 @@ let openai: OpenAI;
 let supabase: SupabaseClient;
 let processDocsParams: ProcessDocsParams;
 let resetProcessDocsParams = true;
+
+/**
+ * Handle an incoming message, processing it and returning a response.
+ * @param message The message to handle.
+ * @param state The state of the agent.
+ * @returns The response to the message.
+ */
+async function handleMessage(
+  runtime: BgentRuntime,
+  message: Message,
+  state?: State,
+) {
+  const _saveRequestMessage = async (message: Message, state: State) => {
+    const { content: senderContent /* senderId, userIds, room_id */ } = message;
+
+    // we run evaluation here since some evals could be modulo based, and we should run on every message
+    if ((senderContent as Content).content) {
+      const { data: data2, error } = await runtime.supabase
+        .from('messages')
+        .select('*')
+        .eq('user_id', message.senderId)
+        .eq('room_id', room_id)
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        console.log('error', error);
+        // TODO: dont need this recall
+      } else if (data2.length > 0 && data2[0].content === message.content) {
+        console.log('already saved', data2);
+      } else {
+        await runtime.messageManager.createMemory({
+          user_ids: [message.senderId, message.agentId, ...message.userIds],
+          user_id: senderId!,
+          content: senderContent,
+          room_id,
+          embedding: embeddingZeroVector,
+        });
+      }
+      await runtime.evaluate(message, state);
+    }
+  };
+
+  await _saveRequestMessage(message, state as State);
+  // if (!state) {
+  state = (await runtime.composeState(message)) as State;
+  // }
+
+  const context = composeContext({
+    state,
+    template: messageHandlerTemplate,
+  });
+
+  if (runtime.debugMode) {
+    console.log(context, 'Response Context');
+  }
+
+  let responseContent: Content | null = null;
+  const { senderId, room_id, userIds: user_ids, agentId } = message;
+
+  for (let triesLeft = 3; triesLeft > 0; triesLeft--) {
+    console.log(context);
+    const response = await runtime.completion({
+      context,
+      stop: [],
+    });
+
+    runtime.supabase
+      .from('logs')
+      .insert({
+        body: { message, context, response },
+        user_id: senderId,
+        room_id,
+        user_ids: user_ids!,
+        agent_id: agentId!,
+        type: 'main_completion',
+      })
+      .then(({ error }) => {
+        if (error) {
+          console.error('error', error);
+        }
+      });
+
+    const parsedResponse = parseJSONObjectFromText(
+      response,
+    ) as unknown as Content;
+
+    if (
+      (parsedResponse.user as string)?.includes(
+        (state as State).agentName as string,
+      )
+    ) {
+      responseContent = {
+        content: parsedResponse.content,
+        action: parsedResponse.action,
+      };
+      break;
+    }
+  }
+
+  if (!responseContent) {
+    responseContent = {
+      content: '',
+      action: 'IGNORE',
+    };
+  }
+
+  const _saveResponseMessage = async (
+    message: Message,
+    state: State,
+    responseContent: Content,
+  ) => {
+    const { agentId, userIds, room_id } = message;
+
+    responseContent.content = responseContent.content?.trim();
+
+    if (responseContent.content) {
+      await runtime.messageManager.createMemory({
+        user_ids: userIds!,
+        user_id: agentId!,
+        content: responseContent,
+        room_id,
+        embedding: embeddingZeroVector,
+      });
+      await runtime.evaluate(message, { ...state, responseContent });
+    } else {
+      console.warn('Empty response, skipping');
+    }
+  };
+
+  await _saveResponseMessage(message, state, responseContent);
+  await runtime.processActions(message, responseContent);
+
+  return responseContent;
+}
 
 // Add this function to fetch the bot's name
 async function fetchBotName(botToken: string) {
@@ -350,7 +494,7 @@ router.post('/', async (request, env, event) => {
       (async () => {
         let responseContent = 'How can I assist you with A-Frame?'; // Default response
         try {
-          const data = (await runtime.handleMessage(message)) as Content;
+          const data = (await handleMessage(runtime, message)) as Content;
 
           responseContent = `> ${messageContent}\n\n**<@${interaction?.member?.user?.id}> ${data.content}**`;
 

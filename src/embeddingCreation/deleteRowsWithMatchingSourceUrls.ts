@@ -9,7 +9,7 @@ export async function deleteMatchingRecords(
     const { data, error } = await supabase
       .from('lore')
       .delete()
-      .filter('content', 'cs', `{"sourceUrl":"${sourceUrl}"}`);
+      .contains('content', { sourceUrl: sourceUrl });
 
     if (error) {
       throw error;

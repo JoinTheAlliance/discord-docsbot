@@ -31,7 +31,7 @@
     "__tests__",
     "jest.config.js",
     "rollup.config.js"
-  ],
+, "scripts/embeddingCreation"  ],
   "exclude": [
     "node_modules",
     "dist"
