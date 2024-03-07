@@ -8,7 +8,6 @@
   "scripts": {
     "start": "wrangler start",
     "dev": "wrangler dev",
-    "docs": "bash ./scripts/docs.sh",
     "ngrok": "ngrok http 8787",
     "fix": "eslint --fix '**/*.ts'",
     "lint": "eslint '**/*.ts'",
