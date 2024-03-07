@@ -43,6 +43,45 @@ function sectionizeDocument(documentContent: string, sectionDelimiter: string) {
  * pgvector in Supabase. Currently only supports Markdown (.MD) files.
  * @param {ProcessDocsParams} params - An object that conforms to the ProcessDocsParams interface.
  */
+async function makeRequest(
+  octokit: Octokit,
+  requestOptions: {
+    method: string;
+    url: string;
+    owner: string;
+    repo: string;
+    path?: string;
+    headers:
+    | { 'X-GitHub-Api-Version': string }
+    | { 'X-GitHub-Api-Version': string }
+    | { 'X-GitHub-Api-Version': string }
+    | { 'X-GitHub-Api-Version': string };
+    pull_number?: number;
+    per_page?: number;
+    page?: number;
+  },
+) {
+  try {
+    const response = await octokit.request(requestOptions);
+    return response;
+    // @ts-expect-error - weird error
+  } catch (error: { status: number; headers: { [x: string]: string } }) {
+    if (
+      error.status === 403 &&
+      error.headers['x-ratelimit-remaining'] === '0'
+    ) {
+      const retryAfter =
+        parseInt(error.headers['x-ratelimit-reset'], 10) -
+        Math.floor(Date.now() / 1000);
+      console.log(`Rate limited. Retrying in ${retryAfter} seconds...`);
+      await new Promise((resolve) => setTimeout(resolve, retryAfter * 1000));
+      return makeRequest(octokit, requestOptions);
+    } else {
+      throw error;
+    }
+  }
+}
+
 export async function vectorizeDocuments(params: ProcessDocsParams) {
   try {
     const {
@@ -58,17 +97,16 @@ export async function vectorizeDocuments(params: ProcessDocsParams) {
     } = params;
 
     // Fetch the documentation directories or files.
-    let response = await octokit.request(
-      'GET /repos/{owner}/{repo}/contents/{path}',
-      {
-        owner: repoOwner,
-        repo: repoName,
-        path: pathToRepoDocuments,
-        headers: {
-          'X-GitHub-Api-Version': '2022-11-28',
-        },
+    let response = await makeRequest(octokit, {
+      method: 'GET',
+      url: '/repos/{owner}/{repo}/contents/{path}',
+      owner: repoOwner,
+      repo: repoName,
+      path: pathToRepoDocuments,
+      headers: {
+        'X-GitHub-Api-Version': '2022-11-28',
       },
-    );
+    });
 
     response.data = Array.isArray(response.data)
       ? response.data
@@ -78,18 +116,18 @@ export async function vectorizeDocuments(params: ProcessDocsParams) {
     for (const resData of response.data) {
       let dirDocuments = [];
       if (resData.type == 'dir') {
+        console.log('requesting dir: ', resData.name);
         // Fetch all files from the directory.
-        response = await octokit.request(
-          'GET /repos/{owner}/{repo}/contents/{path}',
-          {
-            owner: repoOwner,
-            repo: repoName,
-            path: pathToRepoDocuments + '/' + resData.name,
-            headers: {
-              'X-GitHub-Api-Version': '2022-11-28',
-            },
+        response = await makeRequest(octokit, {
+          method: 'GET',
+          url: '/repos/{owner}/{repo}/contents/{path}',
+          owner: repoOwner,
+          repo: repoName,
+          path: pathToRepoDocuments + '/' + resData.name,
+          headers: {
+            'X-GitHub-Api-Version': '2022-11-28',
           },
-        );
+        });
 
         // Type assertion for response.data
         const documentsArray = response.data as {
@@ -109,17 +147,17 @@ export async function vectorizeDocuments(params: ProcessDocsParams) {
       // Retrieve document data for all docs to process.
       await Promise.all(
         dirDocuments.map(async (document) => {
-          const contentResponse = await octokit.request(
-            'GET /repos/{owner}/{repo}/contents/{path}',
-            {
-              owner: repoOwner,
-              repo: repoName,
-              path: document.path,
-              headers: {
-                'X-GitHub-Api-Version': '2022-11-28',
-              },
+          console.log('requesting doc: ', document.path);
+          const contentResponse = await makeRequest(octokit, {
+            method: 'GET',
+            url: '/repos/{owner}/{repo}/contents/{path}',
+            owner: repoOwner,
+            repo: repoName,
+            path: document.path,
+            headers: {
+              'X-GitHub-Api-Version': '2022-11-28',
             },
-          );
+          });
 
           const decodedContent = Buffer.from(
             (contentResponse.data as { content: string }).content,
@@ -144,11 +182,6 @@ export async function vectorizeDocuments(params: ProcessDocsParams) {
   }
 }
 
-/**
- * Retrieves and processes a list of all documentation documents modified from a pull request.
- * @param {ProcessDocsParams} params - An object that conforms to the ProcessDocsParams interface.
- * @param {string} pullRequestNum - The pull request number.
- */
 export async function fetchLatestPullRequest(
   params: ProcessDocsParams,
   pullRequestNum: string,
@@ -158,24 +191,23 @@ export async function fetchLatestPullRequest(
 
     const page = 1;
 
-    const response = await octokit.request(
-      'GET /repos/{owner}/{repo}/pulls/{pull_number}/files',
-      {
-        owner: repoOwner,
-        repo: repoName,
-        pull_number: parseInt(pullRequestNum),
-        per_page: 100,
-        page: page,
-        headers: {
-          'X-GitHub-Api-Version': '2022-11-28',
-        },
+    const response = await makeRequest(octokit, {
+      method: 'GET',
+      url: '/repos/{owner}/{repo}/pulls/{pull_number}/files',
+      owner: repoOwner,
+      repo: repoName,
+      pull_number: parseInt(pullRequestNum),
+      per_page: 100,
+      page: page,
+      headers: {
+        'X-GitHub-Api-Version': '2022-11-28',
       },
-    );
+    });
 
     await Promise.all(
-      response.data.map(async (filePath) => {
+      response.data.map(async (filePath: { filename: string | string[] }) => {
         if (filePath.filename.includes(`${pathToRepoDocuments}/`)) {
-          params.pathToRepoDocuments = filePath.filename;
+          params.pathToRepoDocuments = filePath.filename as string;
           await vectorizeDocuments(params);
         }
       }),
