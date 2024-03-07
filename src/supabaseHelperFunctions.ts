@@ -7,19 +7,12 @@ import { createClient, SupabaseClient } from '@supabase/supabase-js';
  * @returns {SupabaseClient} - SupabaseClient object for database API calls.
  */
 export function initializeSupabase(
-    supabaseUrl: string | undefined,
-    supabaseServiceApiKey: string | undefined
-  ): SupabaseClient {
-    const supabase = createClient(
-      supabaseUrl!,
-      supabaseServiceApiKey!,
-      {
-        auth: { persistSession: false },
-      }
-    );
-  
-    return supabase;
-  }
+  supabaseUrl: string | undefined,
+  supabaseServiceApiKey: string | undefined,
+): SupabaseClient {
+  const supabase = createClient(supabaseUrl!, supabaseServiceApiKey!, {
+    auth: { persistSession: false },
+  });
 
-
-
+  return supabase;
+}

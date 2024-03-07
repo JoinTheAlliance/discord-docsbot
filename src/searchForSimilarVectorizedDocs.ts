@@ -30,7 +30,7 @@ export async function searchSimilarMessages(
       match_count: 5,
     });
 
-    console.log('Found docs: ', foundDocuments)
+    console.log('Found docs: ', foundDocuments);
     return foundDocuments;
   } catch (error) {
     console.error('Error searching similar messages:', error);

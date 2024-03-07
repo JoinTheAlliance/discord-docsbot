@@ -14,15 +14,16 @@ import { Router } from 'itty-router';
 import {
   ProcessDocsParams,
   vectorizeDocuments,
-  fetchLatestPullRequest 
-} from '../scripts/docs';
+  fetchLatestPullRequest,
+} from './docs';
 import getUuid from 'uuid-by-string';
-import { Octokit } from "octokit";
+import { Octokit } from 'octokit';
 import { OpenAI } from 'openai';
-import { searchSimilarMessages } from '../scripts/searchForSimilarVectorizedDocs';
-import { updateMessageContent } from '../scripts/updatePromptToBgentWithDocs';
-import { initializeOpenAi } from '../scripts/openAiHelperFunctions';
-import { initializeSupabase } from '../scripts/supabaseHelperFunctions';
+import { searchSimilarMessages } from './searchForSimilarVectorizedDocs';
+import { updateMessageContent } from './updatePromptToBgentWithDocs';
+import { initializeOpenAi } from './openAiHelperFunctions';
+import { initializeSupabase } from './supabaseHelperFunctions';
+import { BodyInit } from 'openai/_shims';
 
 let openai: OpenAI;
 let supabase: SupabaseClient;
@@ -44,7 +45,10 @@ async function fetchBotName(botToken: string) {
     throw new Error(`Error fetching bot details: ${response.statusText}`);
   }
 
-  const data = await response.json();
+  const data = (await response.json()) as {
+    username: string;
+    discriminator: string;
+  };
   return data.username; // Or data.tag for username#discriminator
 }
 
@@ -200,7 +204,9 @@ router.get('/refresh-docs', async (request, _env) => {
   await fetchLatestPullRequest(processDocsParams, pullRequestNumber);
   resetProcessDocsParams = true;
 
-  return new Response(`Docs from pull request #${pullRequestNumber} refreshed.`);
+  return new Response(
+    `Docs from pull request #${pullRequestNumber} refreshed.`,
+  );
 });
 
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -283,13 +289,12 @@ router.post('/', async (request, env, event) => {
     interaction.type === InteractionType.APPLICATION_COMMAND &&
     interaction.data.name === TEST_COMMAND.name
   ) {
-
     const userId = getUuid(interaction?.member?.user?.id) as UUID;
     const userName = interaction?.member?.user?.username;
     const agentId = getUuid(env.DISCORD_APPLICATION_ID) as UUID;
     const room_id = getUuid(interaction.channel_id) as UUID;
 
-    console.log('User info: ', interaction?.member?.user)
+    console.log('User info: ', interaction?.member?.user);
     console.log('got ids');
 
     // // Ensure all necessary records exist in Supabase
@@ -324,7 +329,7 @@ router.post('/', async (request, env, event) => {
       room_id,
     } as unknown as Message;
 
-    console.log('final message: ', message)
+    console.log('final message: ', message);
 
     const runtime = new BgentRuntime({
       debugMode: true,
@@ -349,12 +354,15 @@ router.post('/', async (request, env, event) => {
 
           responseContent = `> ${messageContent}\n\n**<@${interaction?.member?.user?.id}> ${data.content}**`;
 
-          let newContentLength = newContent?.sourceUrls?.length ?? 0
+          const newContentLength = newContent?.sourceUrls?.length ?? 0;
           if (newContentLength > 0) {
-            responseContent += "\n\nRelated documentation links:\n";
+            responseContent += '\n\nRelated documentation links:\n';
             for (let i = 0; i < newContentLength; i++) {
-              const htmlLink = newContent?.sourceUrls[i].replace(/\.md/g, ".html");
-              responseContent += `- <${htmlLink}>\n`
+              const htmlLink = newContent?.sourceUrls[i].replace(
+                /\.md/g,
+                '.html',
+              );
+              responseContent += `- <${htmlLink}>\n`;
             }
           }
 
@@ -372,8 +380,13 @@ router.post('/', async (request, env, event) => {
           });
 
           console.log('Follow-up response status:', followUpResponse);
-          const followUpData = await followUpResponse.json();
-          console.log('Follow-up response data:', followUpData?.errors?.content);
+          const followUpData = (await followUpResponse.json()) as {
+            errors: { content: string };
+          };
+          console.log(
+            'Follow-up response data:',
+            followUpData?.errors?.content,
+          );
         } catch (error) {
           console.error('Error processing command:', error);
         }
@@ -420,7 +433,9 @@ const server = {
   },
 };
 
-async function initializeSupabaseAndOpenAIVariable(env: any) {
+async function initializeSupabaseAndOpenAIVariable(env: {
+  [key: string]: string;
+}) {
   if (!openai) {
     openai = initializeOpenAi(env.OPENAI_API_KEY);
   }
@@ -429,7 +444,7 @@ async function initializeSupabaseAndOpenAIVariable(env: any) {
     // Initialize Supabase
     supabase = initializeSupabase(
       env.SUPABASE_URL,
-      env.SUPABASE_SERVICE_API_KEY
+      env.SUPABASE_SERVICE_API_KEY,
     );
   }
 
@@ -439,12 +454,13 @@ async function initializeSupabaseAndOpenAIVariable(env: any) {
       supabase: supabase,
       openai: openai,
       octokit: new Octokit({ auth: env.GITHUB_AUTH_TOKEN }),
-      repoOwner: 'blinKAlliance',
-      repoName: 'aframe',
+      repoOwner: process.env.REPO_OWNER ?? 'aframevr',
+      repoName: process.env.REPO_NAME ?? 'aframe',
       pathToRepoDocuments: 'docs',
       documentationFileExt: 'md',
       sectionDelimiter: '#',
-      sourceDocumentationUrl: 'https://aframe.io/docs/master/'
+      sourceDocumentationUrl:
+        process.env.DOCUMENTATION_URL ?? 'https://aframe.io/docs/master/',
     };
 
     resetProcessDocsParams = false;
