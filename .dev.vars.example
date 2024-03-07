@@ -1,0 +1,9 @@
+DISCORD_APPLICATION_ID=
+DISCORD_PUBLIC_KEY=
+DISCORD_TOKEN=
+SUPABASE_URL=https://<your prodict id>.supabase.co
+SUPABASE_SERVICE_API_KEY=
+OPENAI_API_KEY=sk-*
+REPO_OWNER=aframevr
+REPO_NAME=aframe
+DOCUMENTATION_URL='https://aframe.io/docs/master/'
