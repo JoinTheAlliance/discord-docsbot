@@ -5,14 +5,14 @@
 import { SupabaseClient } from '@supabase/supabase-js';
 import {
   BgentRuntime,
-  wait,
-  type Message,
-  type Content,
-  embeddingZeroVector,
   State,
-  parseJSONObjectFromText,
   composeContext,
+  embeddingZeroVector,
   messageHandlerTemplate,
+  parseJSONObjectFromText,
+  wait,
+  type Content,
+  type Message,
 } from 'bgent';
 import { UUID } from 'crypto';
 import {
@@ -21,21 +21,17 @@ import {
   verifyKey,
 } from 'discord-interactions';
 import { Router } from 'itty-router';
+import { Octokit } from 'octokit';
+import getUuid from 'uuid-by-string';
 import {
   ProcessDocsParams,
-  vectorizeDocuments,
   fetchLatestPullRequest,
+  vectorizeDocuments,
 } from './docs';
-import getUuid from 'uuid-by-string';
-import { Octokit } from 'octokit';
-import { OpenAI } from 'openai';
 import { searchSimilarMessages } from './searchForSimilarVectorizedDocs';
-import { updateMessageContent } from './updatePromptToBgentWithDocs';
-import { initializeOpenAi } from './openAiHelperFunctions';
 import { initializeSupabase } from './supabaseHelperFunctions';
-import { BodyInit } from 'openai/_shims';
+import { updateMessageContent } from './updatePromptToBgentWithDocs';
 
-let openai: OpenAI;
 let supabase: SupabaseClient;
 let processDocsParams: ProcessDocsParams;
 let resetProcessDocsParams = true;
@@ -317,7 +313,10 @@ const TEST_COMMAND = {
 };
 
 class JsonResponse extends Response {
-  constructor(body: BodyInit | unknown, init: ResponseInit) {
+  constructor(
+    body: { type?: InteractionResponseType; error?: string },
+    init: ResponseInit,
+  ) {
     const jsonBody = JSON.stringify(body);
     init = init || {
       headers: {
@@ -453,11 +452,20 @@ router.post('/', async (request, env, event) => {
     const messageContent = interaction.data.options[0].value;
     console.log('interaction.data', interaction.data);
 
+    const runtime = new BgentRuntime({
+      debugMode: true,
+      serverUrl: 'https://api.openai.com/v1',
+      supabase: supabase,
+      token: env.OPENAI_API_KEY,
+      evaluators: [],
+      actions: [wait],
+    });
+
     // Searches the database for the top5 similar documents relating to the message with a similarity of a certain threshold
     const priorPromptKnowledgeFromDocs = await searchSimilarMessages(
       messageContent,
       supabase,
-      openai,
+      runtime,
     );
 
     const newContent = await updateMessageContent(
@@ -474,15 +482,6 @@ router.post('/', async (request, env, event) => {
     } as unknown as Message;
 
     console.log('final message: ', message);
-
-    const runtime = new BgentRuntime({
-      debugMode: true,
-      serverUrl: 'https://api.openai.com/v1',
-      supabase: supabase,
-      token: env.OPENAI_API_KEY,
-      evaluators: [],
-      actions: [wait],
-    });
 
     // Immediately acknowledge the interaction with a deferred response
     // @ts-expect-error - This is a valid response type
@@ -580,10 +579,6 @@ const server = {
 async function initializeSupabaseAndOpenAIVariable(env: {
   [key: string]: string;
 }) {
-  if (!openai) {
-    openai = initializeOpenAi(env.OPENAI_API_KEY);
-  }
-
   if (!supabase) {
     // Initialize Supabase
     supabase = initializeSupabase(
@@ -596,13 +591,13 @@ async function initializeSupabaseAndOpenAIVariable(env: {
   if (resetProcessDocsParams) {
     processDocsParams = {
       supabase: supabase,
-      openai: openai,
       octokit: new Octokit({ auth: env.GITHUB_AUTH_TOKEN }),
       repoOwner: process.env.REPO_OWNER ?? 'aframevr',
       repoName: process.env.REPO_NAME ?? 'aframe',
       pathToRepoDocuments: 'docs',
       documentationFileExt: 'md',
       sectionDelimiter: '#',
+      env: env,
       sourceDocumentationUrl:
         process.env.DOCUMENTATION_URL ?? 'https://aframe.io/docs/master/',
     };
