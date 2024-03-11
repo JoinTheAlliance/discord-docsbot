@@ -5,3 +5,7 @@ node_compat = true
 
 [dev]
 port = 8787
+
+[[services]]
+binding = "afbot"
+service = "afbot"

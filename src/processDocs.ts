@@ -1,5 +1,5 @@
 import s from '@supabase/supabase-js';
-import { BgentRuntime, addLore } from 'bgent';
+import { BgentRuntime, SupabaseDatabaseAdapter, addLore } from 'bgent';
 import dotenv from 'dotenv';
 import { PathLike } from 'fs';
 import fs from 'fs/promises';
@@ -22,7 +22,10 @@ const startingPath = process.argv[2];
 
 const runtime = new BgentRuntime({
   debugMode: process.env.NODE_ENV === 'development',
-  supabase,
+  databaseAdapter: new SupabaseDatabaseAdapter(
+    SUPABASE_URL,
+    SUPABASE_SERVICE_API_KEY,
+  ),
   serverUrl: SERVER_URL,
   token: OPENAI_API_KEY as string,
   actions: [],

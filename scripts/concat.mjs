@@ -3,7 +3,7 @@ import path, { dirname } from 'path';
 import { fileURLToPath } from 'url';
 
 const instructions =
-  'The above code was taken from my codebase at https://github.com/jointhealliance/bgent.';
+  'The above code was taken from my codebase at https://github.com/jointhealliance/afbot.';
 
 // Patterns to ignore
 const ignorePatterns = [
@@ -62,11 +62,11 @@ const readDirectory = (dirPath) => {
 
 // Start reading from the root TypeScript directory
 const concatenatedContent =
-  '# START OF BGENT CODEBASE' + readDirectory(directoryPath);
+  '# START OF AFBOT CODEBASE' + readDirectory(directoryPath);
 
 // Write the concatenated content to the output file
 fs.writeFileSync(
   outputFile,
-  concatenatedContent + '# END OF BGENT CODEBASE\n\n' + instructions,
+  concatenatedContent + '# END OF AFBOT CODEBASE\n\n' + instructions,
 );
 console.log('TypeScript files have been concatenated into:', outputFile);
