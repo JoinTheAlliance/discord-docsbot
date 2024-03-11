@@ -1,8 +1,6 @@
-# AFBot
+# Bgent Discord Docs Bot
 
-A-Frame Helperbot for Discord
-
-This bot is based on the tutorial [in the Discord developer documentation](https://discord.com/developers/docs/tutorials/hosting-on-cloudflare-workers)
+Talk to your docs! This is an example agent which can be deployed to Cloudflare and your Discord server to provide help on your Github documentation.
 
 ## Resources used
 
