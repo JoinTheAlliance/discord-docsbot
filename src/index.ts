@@ -355,6 +355,7 @@ router.get('/refresh-docs', async (request, _env) => {
 });
 
 router.post('/vectorize-document', async (request, env) => {
+  console.log('received request to vectorize-document');
   const { id, sourceUrl } = (await request.json()) as {
     id: string;
     sourceUrl: string;
@@ -363,6 +364,7 @@ router.post('/vectorize-document', async (request, env) => {
   const processDocsParams = await initializeSupabaseAndOpenAIVariable(env);
 
   try {
+    console.log('processing document:', sourceUrl);
     // Fetch the document content from GitHub
     const response = await processDocsParams.octokit.request(
       'GET /repos/{owner}/{repo}/contents/{path}',
@@ -397,6 +399,7 @@ router.post('/vectorize-document', async (request, env) => {
     });
 
     for (const section of sections) {
+      console.log('vectorizing section:', section);
       await addLore({
         runtime,
         content: { content: section },
@@ -423,14 +426,16 @@ router.post('/vectorize-file', async (request, env) => {
   const { octokit, repoOwner, repoName } =
     await initializeSupabaseAndOpenAIVariable(env);
 
-  const { filePath, sectionDelimiter, sourceDocumentationUrl } =
-    (await request.json()) as {
-      filePath: string;
-      sectionDelimiter: string;
-      sourceDocumentationUrl: string;
-    };
+  console.log('received request to vectorize-file');
 
   try {
+    const { filePath, sectionDelimiter, sourceDocumentationUrl } =
+      (await request.json()) as {
+        filePath: string;
+        sectionDelimiter: string;
+        sourceDocumentationUrl: string;
+      };
+
     const contentResponse = await makeRequest(octokit, {
       method: 'GET',
       url: '/repos/{owner}/{repo}/contents/{path}',
@@ -477,6 +482,7 @@ router.post('/vectorize-file', async (request, env) => {
 router.post('/vectorize-directory', async (request, env) => {
   const { octokit, repoOwner, repoName } =
     await initializeSupabaseAndOpenAIVariable(env);
+  console.log('received request to vectorize-directory');
 
   const {
     directoryPath,
@@ -509,10 +515,11 @@ router.post('/vectorize-directory', async (request, env) => {
     const dirDocuments = documentsArray.filter((document) =>
       document.name.endsWith(`.${documentationFileExt}`),
     );
-
+    console.log('dirDocuments', dirDocuments);
     // Make requests to the /vectorize-file route for each file in the directory
     for (const document of dirDocuments) {
-      await fetch(`${env.WORKER_URL}/vectorize-file`, {
+      console.log('requesting file: ', document.path);
+      await env.afbot.fetch(`${env.WORKER_URL}/vectorize-file`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -801,7 +808,9 @@ async function initializeSupabaseAndOpenAIVariable(env: {
 
   return {
     supabase: supabase,
-    octokit: new Octokit({ auth: env.GITHUB_AUTH_TOKEN }),
+    octokit: new Octokit({
+      auth: env.GITHUB_AUTH_TOKEN,
+    }),
     repoOwner: process.env.REPO_OWNER ?? 'aframevr',
     repoName: process.env.REPO_NAME ?? 'aframe',
     pathToRepoDocuments: 'docs',
@@ -872,11 +881,7 @@ async function makeRequest(
     owner: string;
     repo: string;
     path?: string;
-    headers:
-      | { 'X-GitHub-Api-Version': string }
-      | { 'X-GitHub-Api-Version': string }
-      | { 'X-GitHub-Api-Version': string }
-      | { 'X-GitHub-Api-Version': string };
+    headers: { 'X-GitHub-Api-Version': string };
     pull_number?: number;
     per_page?: number;
     page?: number;
@@ -885,8 +890,11 @@ async function makeRequest(
   try {
     const response = await octokit.request(requestOptions);
     return response;
-    // @ts-expect-error - weird error
-  } catch (error: { status: number; headers: { [x: string]: string } }) {
+  } catch (_error: unknown) {
+    const error = _error as {
+      status: number;
+      headers: { [x: string]: string };
+    };
     if (
       error.status === 403 &&
       error.headers['x-ratelimit-remaining'] === '0'
@@ -904,6 +912,7 @@ async function makeRequest(
 }
 
 export async function vectorizeDocuments(params: ProcessDocsParams) {
+  console.log('vectorizing docs');
   try {
     const {
       octokit,
@@ -937,26 +946,56 @@ export async function vectorizeDocuments(params: ProcessDocsParams) {
       if (resData.type === 'dir') {
         console.log('requesting dir: ', resData.name);
         console.log(`${env.WORKER_URL}/vectorize-directory`);
-        await fetch(`${env.WORKER_URL}/vectorize-directory`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            directoryPath: pathToRepoDocuments + '/' + resData.name,
-            documentationFileExt,
-            sectionDelimiter,
-            sourceDocumentationUrl,
-          }),
-        });
+
+        // @ts-expect-error - This is a valid fetch response
+        const response = await env.afbot.fetch(
+          `${env.WORKER_URL}/vectorize-directory`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              directoryPath: pathToRepoDocuments + '/' + resData.name,
+              documentationFileExt,
+              sectionDelimiter,
+              sourceDocumentationUrl,
+            }),
+          },
+        );
+        // check if response is ok
+        if (!response.ok) {
+          console.error('Error vectorizing directory', {
+            // what was the target url
+            responseUrl: response.url,
+            responseStatusText: response.statusText,
+            responseStatus: response.status,
+            responseText: await response.text(),
+          });
+          throw new Error('Error vectorizing directory');
+        } else {
+          console.log('response is ok');
+        }
       } else if (resData.type === 'file') {
-        await fetch(`${env.WORKER_URL}/vectorize-file`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            filePath: resData.path,
-            sectionDelimiter,
-            sourceDocumentationUrl,
-          }),
-        });
+        // @ts-expect-error - This is a valid fetch response
+        const response = await env.afbot.fetch(
+          `${env.WORKER_URL}/vectorize-file`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              filePath: resData.path,
+              sectionDelimiter,
+              sourceDocumentationUrl,
+            }),
+          },
+        );
+        if (!response.ok) {
+          // log the error itself
+          const error = await response.text();
+          console.error('Error vectorizing file:', error);
+          throw new Error('Error vectorizing file' + error);
+        } else {
+          console.log('response is ok');
+        }
       } else {
         throw new Error('Repository URL does not exist!');
       }
@@ -991,15 +1030,19 @@ export async function fetchLatestPullRequest(
     // Iterate over each file path sequentially
     for (const filePath of response.data) {
       if (filePath.filename.includes(`${pathToRepoDocuments}/`)) {
-        await fetch(`${params.env.WORKER_URL}/vectorize-file`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            filePath: filePath.filename,
-            sectionDelimiter: params.sectionDelimiter,
-            sourceDocumentationUrl: params.sourceDocumentationUrl,
-          }),
-        });
+        // @ts-expect-error - This is a valid fetch response
+        await params.env.afbot.fetch(
+          `${params.env.WORKER_URL}/vectorize-file`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              filePath: filePath.filename,
+              sectionDelimiter: params.sectionDelimiter,
+              sourceDocumentationUrl: params.sourceDocumentationUrl,
+            }),
+          },
+        );
       }
     }
   } catch (error) {
