@@ -1,11 +1,11 @@
 /**
  * The core server that runs on a Cloudflare worker.
  */
-
 import { SupabaseClient } from '@supabase/supabase-js';
 import {
   BgentRuntime,
   State,
+  SupabaseDatabaseAdapter,
   addLore,
   composeContext,
   embeddingZeroVector,
@@ -14,8 +14,8 @@ import {
   wait,
   type Content,
   type Message,
-  SupabaseDatabaseAdapter,
 } from 'bgent';
+import cheerio from 'cheerio';
 import { UUID } from 'crypto';
 import {
   InteractionResponseType,
@@ -294,22 +294,36 @@ async function ensureParticipantInRoom(
  * and registration.
  */
 
-const COMMANDS = {
-  name: 'help',
-  description: 'Ask a question about A-Frame.',
-  options: [
-    {
-      name: 'question',
-      description: 'The question to ask.',
-      type: 3,
-      required: false,
-    },
-  ],
-};
+const COMMANDS = [
+  {
+    name: 'help',
+    description: 'Ask a question about A-Frame.',
+    options: [
+      {
+        name: 'question',
+        description: 'The question to ask.',
+        type: 3,
+        required: false,
+      },
+    ],
+  },
+  {
+    name: 'add-hackmd-url',
+    description: 'Vectorize markdown content from a HackMD URL.',
+    options: [
+      {
+        name: 'url',
+        description: 'The HackMD URL to fetch and vectorize.',
+        type: 3, // Type 3 is a string in Discord's command options
+        required: true,
+      },
+    ],
+  },
+];
 
 class JsonResponse extends Response {
   constructor(
-    body: { type?: InteractionResponseType; error?: string },
+    body: { type?: InteractionResponseType; error?: string; content?: string },
     init: ResponseInit,
   ) {
     const jsonBody = JSON.stringify(body);
@@ -323,6 +337,25 @@ class JsonResponse extends Response {
 }
 
 const router = Router();
+
+async function fetchHackMDContent(url: string) {
+  const response = await fetch(url);
+  if (!response.ok) {
+    throw new Error(`Failed to fetch HackMD content: ${response.statusText}`);
+  }
+  return await response.text();
+}
+
+function extractContentWithCheerio(html: string) {
+  const $ = cheerio.load(html);
+  const content = $('.markdown-body').html(); // Use `.text()` if you only need the text without HTML tags.
+
+  if (!content) {
+    throw new Error('Content not found in the HackMD document');
+  }
+
+  return content;
+}
 
 /**
  * A simple :wave: hello page to verify the worker is working.
@@ -620,7 +653,7 @@ router.get('/commands', async (_request, env) => {
       Authorization: `Bot ${token}`,
     },
     method: 'PUT',
-    body: JSON.stringify([COMMANDS]),
+    body: JSON.stringify(COMMANDS),
   });
 
   if (response.ok) {
@@ -646,20 +679,78 @@ router.get('/commands', async (_request, env) => {
  */
 router.post('/', async (request, env, event) => {
   const { isValid, interaction } = await verifyDiscordRequest(request, env);
+  console.log('got discord request', interaction, isValid);
 
   if (!isValid || !interaction) {
     return new Response('Bad request signature.', { status: 401 });
   }
+  console.log('*** interaction', interaction);
 
   if (interaction.type === InteractionType.PING) {
     // @ts-expect-error - This is a valid response type
     return new JsonResponse({ type: InteractionResponseType.PONG });
-  }
-
-  if (
+  } else if (
     interaction.type === InteractionType.APPLICATION_COMMAND &&
-    interaction.data.name === COMMANDS.name
+    interaction.data.name === 'add-hackmd-url'
   ) {
+    const hackMDUrl = interaction.data.options[0].value.split('?')[0] + '?view';
+
+    // Immediately acknowledge the interaction with a deferred response
+    const deferredResponse = new JsonResponse(
+      {
+        type: InteractionResponseType.DEFERRED_CHANNEL_MESSAGE_WITH_SOURCE,
+      },
+      { status: 200 },
+    );
+    const followUpUrl = `https://discord.com/api/v10/webhooks/${env.DISCORD_APPLICATION_ID}/${interaction.token}/messages/@original`;
+
+    event.waitUntil(
+      (async () => {
+        try {
+          const htmlContent = await fetchHackMDContent(hackMDUrl);
+          const markdownContent = extractContentWithCheerio(htmlContent);
+
+          // Prepare the response content
+          const responseContent = `Content extracted successfully! Here's a snippet: ${markdownContent.slice(
+            0,
+            200,
+          )}...`;
+
+          // Send the follow-up message with the actual response
+          await fetch(followUpUrl, {
+            method: 'PATCH', // Use PATCH to edit the original deferred message
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bot ${env.DISCORD_TOKEN}`,
+            },
+            body: JSON.stringify({ content: responseContent }),
+          });
+        } catch (error) {
+          console.error('Error processing HackMD content:', error);
+          const errorMessage = `Error processing HackMD content: ${
+            (error as Error).message
+          }`;
+
+          // Update the original message to indicate the error
+          await fetch(followUpUrl, {
+            method: 'PATCH',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bot ${env.DISCORD_TOKEN}`,
+            },
+            body: JSON.stringify({ content: errorMessage }),
+          });
+        }
+      })(),
+    );
+
+    // Return the deferred response to Discord immediately
+    return deferredResponse;
+  } else if (
+    interaction.type === InteractionType.APPLICATION_COMMAND &&
+    interaction.data.name === 'help'
+  ) {
+    console.log('got help command');
     const userId = getUuid(interaction?.member?.user?.id) as UUID;
     const userName = interaction?.member?.user?.username;
     const agentId = getUuid(env.DISCORD_APPLICATION_ID) as UUID;
