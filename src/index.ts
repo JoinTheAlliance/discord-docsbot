@@ -6,6 +6,7 @@ import { SupabaseClient } from '@supabase/supabase-js';
 import {
   BgentRuntime,
   State,
+  addLore,
   composeContext,
   embeddingZeroVector,
   messageHandlerTemplate,
@@ -13,6 +14,7 @@ import {
   wait,
   type Content,
   type Message,
+  SupabaseDatabaseAdapter,
 } from 'bgent';
 import { UUID } from 'crypto';
 import {
@@ -23,11 +25,6 @@ import {
 import { Router } from 'itty-router';
 import { Octokit } from 'octokit';
 import getUuid from 'uuid-by-string';
-import {
-  ProcessDocsParams,
-  fetchLatestPullRequest,
-  vectorizeDocuments,
-} from './docs';
 import { searchSimilarMessages } from './searchForSimilarVectorizedDocs';
 import { initializeSupabase } from './supabaseHelperFunctions';
 import { updateMessageContent } from './updatePromptToBgentWithDocs';
@@ -52,7 +49,7 @@ async function handleMessage(
 
     // we run evaluation here since some evals could be modulo based, and we should run on every message
     if ((senderContent as Content).content) {
-      const { data: data2, error } = await runtime.supabase
+      const { data: data2, error } = await supabase
         .from('messages')
         .select('*')
         .eq('user_id', message.senderId)
@@ -101,7 +98,7 @@ async function handleMessage(
       stop: [],
     });
 
-    runtime.supabase
+    supabase
       .from('logs')
       .insert({
         body: { message, context, response },
@@ -337,27 +334,149 @@ router.get('/', (_request, env) => {
 });
 
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
-router.get('/refresh-docs', async (request, _env) => {
+router.get('/refresh-docs', async (request, env) => {
   const pullRequestNumber: string = request.query.pr_number?.toString() ?? '';
   if (!pullRequestNumber) {
     return new Response('Pull request number is required.', { status: 400 });
   }
 
-  await initializeSupabaseAndOpenAIVariable(_env);
-  await fetchLatestPullRequest(processDocsParams, pullRequestNumber);
+  await initializeSupabaseAndOpenAIVariable(env);
+
+  // Fetch the files modified in the specified pull request
+  const response = await processDocsParams.octokit.request(
+    'GET /repos/{owner}/{repo}/pulls/{pull_number}/files',
+    {
+      owner: processDocsParams.repoOwner,
+      repo: processDocsParams.repoName,
+      pull_number: parseInt(pullRequestNumber),
+      per_page: 100,
+    },
+  );
+
+  // Filter the modified files to only include documentation files
+  const modifiedDocuments = response.data.filter((file: { filename: string }) =>
+    file.filename.startsWith(processDocsParams.pathToRepoDocuments),
+  );
+
+  // Queue the modified documents with their source URL and callback URL
+  const queuedDocuments = modifiedDocuments.map(
+    (doc: { filename: string }) => ({
+      sourceUrl: doc.filename,
+      callbackUrl: env.CALLBACK_URL,
+    }),
+  );
+
+  const { error: insertError } = await supabase
+    .from('documents')
+    .insert(queuedDocuments);
+
+  if (insertError) {
+    console.error('Error queueing documents:', insertError);
+    return new Response('Failed to queue documents', { status: 500 });
+  }
+
   resetProcessDocsParams = true;
 
   return new Response(
-    `Docs from pull request #${pullRequestNumber} refreshed.`,
+    `Docs from pull request #${pullRequestNumber} queued for vectorization.`,
   );
 });
 
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
-router.get('/refresh-all-docs', async (_request, _env) => {
-  await initializeSupabaseAndOpenAIVariable(_env);
-  await vectorizeDocuments(processDocsParams);
+router.get('/refresh-all-docs', async (_request, env) => {
+  await initializeSupabaseAndOpenAIVariable(env);
 
-  return new Response('All docs refreshed.');
+  // Get all document names and queue them
+  const { data: documents, error } = await supabase
+    .from('documents')
+    .select('sourceUrl');
+
+  if (error) {
+    console.error('Error fetching documents:', error);
+    return new Response('Failed to fetch documents', { status: 500 });
+  }
+
+  // Queue the documents with their source URL and callback URL
+  const queuedDocuments = documents.map((doc: { sourceUrl: string }) => ({
+    sourceUrl: doc.sourceUrl,
+    callbackUrl: env.CALLBACK_URL,
+  }));
+
+  const { error: insertError } = await supabase
+    .from('documents')
+    .insert(queuedDocuments);
+
+  if (insertError) {
+    console.error('Error queueing documents:', insertError);
+    return new Response('Failed to queue documents', { status: 500 });
+  }
+
+  return new Response('Documents queued for vectorization');
+});
+
+router.post('/vectorize-document', async (request, _env) => {
+  const { id, sourceUrl } = (await request.json()) as {
+    id: string;
+    sourceUrl: string;
+  };
+
+  await initializeSupabaseAndOpenAIVariable(_env);
+
+  try {
+    // Fetch the document content from GitHub
+    const response = await processDocsParams.octokit.request(
+      'GET /repos/{owner}/{repo}/contents/{path}',
+      {
+        owner: processDocsParams.repoOwner,
+        repo: processDocsParams.repoName,
+        path: sourceUrl,
+      },
+    );
+
+    const decodedContent = Buffer.from(
+      (response.data as { content: string }).content,
+      'base64',
+    ).toString('utf-8');
+
+    // Vectorize the document and save it to the 'lore' table
+    const { sections } = sectionizeDocument(
+      decodedContent,
+      processDocsParams.sectionDelimiter,
+    );
+    const updatedPath = sourceUrl.replace('docs/', '');
+    const runtime = new BgentRuntime({
+      debugMode: true,
+      serverUrl: 'https://api.openai.com/v1',
+      databaseAdapter: new SupabaseDatabaseAdapter(
+        processDocsParams.env.SUPABASE_URL,
+        processDocsParams.env.SUPABASE_SERVICE_API_KEY,
+      ),
+      token: processDocsParams.env.OPENAI_API_KEY,
+      evaluators: [],
+      actions: [wait],
+    });
+
+    for (const section of sections) {
+      await addLore({
+        runtime,
+        content: { content: section },
+        source: processDocsParams.sourceDocumentationUrl + updatedPath,
+      });
+    }
+
+    // Delete the document from the 'documents' table after vectorization
+    const { error } = await supabase.from('documents').delete().eq('id', id);
+
+    if (error) {
+      console.error('Error deleting document:', error);
+      return new Response('Failed to delete document', { status: 500 });
+    }
+
+    return new Response('Document vectorized successfully');
+  } catch (error) {
+    console.error('Error vectorizing document:', error);
+    return new Response('Failed to vectorize document', { status: 500 });
+  }
 });
 
 /**
@@ -414,10 +533,7 @@ router.get('/commands', async (_request, env) => {
  * https://discord.com/developers/docs/interactions/receiving-and-responding#interaction-object
  */
 router.post('/', async (request, env, event) => {
-  const { isValid, interaction } = await server.verifyDiscordRequest(
-    request,
-    env,
-  );
+  const { isValid, interaction } = await verifyDiscordRequest(request, env);
 
   if (!isValid || !interaction) {
     return new Response('Bad request signature.', { status: 401 });
@@ -455,7 +571,10 @@ router.post('/', async (request, env, event) => {
     const runtime = new BgentRuntime({
       debugMode: true,
       serverUrl: 'https://api.openai.com/v1',
-      supabase: supabase,
+      databaseAdapter: new SupabaseDatabaseAdapter(
+        env.SUPABASE_URL,
+        env.SUPABASE_SERVICE_API_KEY,
+      ),
       token: env.OPENAI_API_KEY,
       evaluators: [],
       actions: [wait],
@@ -564,18 +683,6 @@ async function verifyDiscordRequest(
   return { interaction: JSON.parse(body), isValid: true };
 }
 
-const server = {
-  verifyDiscordRequest: verifyDiscordRequest,
-  fetch: async function (
-    request: Request,
-    env: { [key: string]: string },
-    // @ts-expect-error - This is a valid event type
-    event,
-  ) {
-    return router.handle(request, env, event);
-  },
-};
-
 async function initializeSupabaseAndOpenAIVariable(env: {
   [key: string]: string;
 }) {
@@ -606,4 +713,239 @@ async function initializeSupabaseAndOpenAIVariable(env: {
   }
 }
 
-export default server;
+export default {
+  fetch: async function (
+    request: Request,
+    env: { [key: string]: string },
+    // @ts-expect-error - This is a valid event type
+    event,
+  ) {
+    return router.handle(request, env, event);
+  },
+};
+
+export interface ProcessDocsParams {
+  supabase: SupabaseClient;
+  octokit: Octokit;
+  repoOwner: string;
+  repoName: string;
+  pathToRepoDocuments: string;
+  documentationFileExt: string;
+  sectionDelimiter: string;
+  sourceDocumentationUrl: string;
+  env: { [key: string]: string };
+}
+
+/**
+ * Splits a document into logical sections by a delimiter.
+ * Currently only works for Markdown (.MD) files.
+ * @param {string} documentContent - The content of the file.
+ * @param {string} sectionDelimiter - Character sequence to sectionize the file content.
+ * @returns {object} - The document sections (`sections`) and documentation URL (`url`).
+ */
+function sectionizeDocument(documentContent: string, sectionDelimiter: string) {
+  // Retrieve YAML header and extract out documentation url path.
+  const yamlHeader = documentContent.match(/---\n([\s\S]+?)\n---/);
+
+  // Split the remaining content into sections based on the YAML header and delimiter.
+  const delim = new RegExp(`\\n+${sectionDelimiter}+\\s+`);
+  const sections = documentContent
+    .replace(yamlHeader ? yamlHeader[0] : '', '')
+    .split(delim);
+
+  // Debug
+  //printSectionizedDocument(sections);
+
+  return { sections: sections };
+}
+
+/**
+ * Retrieves, processes, and stores all documents on a GitHub repository to a
+ * pgvector in Supabase. Currently only supports Markdown (.MD) files.
+ * @param {ProcessDocsParams} params - An object that conforms to the ProcessDocsParams interface.
+ */
+async function makeRequest(
+  octokit: Octokit,
+  requestOptions: {
+    method: string;
+    url: string;
+    owner: string;
+    repo: string;
+    path?: string;
+    headers:
+      | { 'X-GitHub-Api-Version': string }
+      | { 'X-GitHub-Api-Version': string }
+      | { 'X-GitHub-Api-Version': string }
+      | { 'X-GitHub-Api-Version': string };
+    pull_number?: number;
+    per_page?: number;
+    page?: number;
+  },
+) {
+  try {
+    const response = await octokit.request(requestOptions);
+    return response;
+    // @ts-expect-error - weird error
+  } catch (error: { status: number; headers: { [x: string]: string } }) {
+    if (
+      error.status === 403 &&
+      error.headers['x-ratelimit-remaining'] === '0'
+    ) {
+      const retryAfter =
+        parseInt(error.headers['x-ratelimit-reset'], 10) -
+        Math.floor(Date.now() / 1000);
+      console.log(`Rate limited. Retrying in ${retryAfter} seconds...`);
+      await new Promise((resolve) => setTimeout(resolve, retryAfter * 1000));
+      return makeRequest(octokit, requestOptions);
+    } else {
+      throw error;
+    }
+  }
+}
+
+export async function vectorizeDocuments(params: ProcessDocsParams) {
+  try {
+    const {
+      octokit,
+      repoOwner,
+      repoName,
+      pathToRepoDocuments,
+      documentationFileExt,
+      sectionDelimiter,
+      sourceDocumentationUrl,
+      env,
+    } = params;
+
+    // Fetch the documentation directories or files.
+    let response = await makeRequest(octokit, {
+      method: 'GET',
+      url: '/repos/{owner}/{repo}/contents/{path}',
+      owner: repoOwner,
+      repo: repoName,
+      path: pathToRepoDocuments,
+      headers: {
+        'X-GitHub-Api-Version': '2022-11-28',
+      },
+    });
+
+    response.data = Array.isArray(response.data)
+      ? response.data
+      : [response.data];
+
+    // Process documents in each directory.
+    for (const resData of response.data) {
+      let dirDocuments = [];
+      if (resData.type == 'dir') {
+        console.log('requesting dir: ', resData.name);
+        // Fetch all files from the directory.
+        response = await makeRequest(octokit, {
+          method: 'GET',
+          url: '/repos/{owner}/{repo}/contents/{path}',
+          owner: repoOwner,
+          repo: repoName,
+          path: pathToRepoDocuments + '/' + resData.name,
+          headers: {
+            'X-GitHub-Api-Version': '2022-11-28',
+          },
+        });
+
+        const documentsArray = response.data as {
+          name: string;
+          path: string;
+        }[];
+        dirDocuments = documentsArray.filter((document) =>
+          document.name.endsWith(`.${documentationFileExt}`),
+        );
+      } else if (resData.type == 'file') {
+        dirDocuments = [resData];
+      } else {
+        throw new Error('Repository URL does not exist!');
+      }
+
+      // Retrieve and process document data for each document sequentially.
+      for (const document of dirDocuments) {
+        console.log('requesting doc: ', document.path);
+        const contentResponse = await makeRequest(octokit, {
+          method: 'GET',
+          url: '/repos/{owner}/{repo}/contents/{path}',
+          owner: repoOwner,
+          repo: repoName,
+          path: document.path,
+          headers: {
+            'X-GitHub-Api-Version': '2022-11-28',
+          },
+        });
+
+        const decodedContent = Buffer.from(
+          (contentResponse.data as { content: string }).content,
+          'base64',
+        ).toString('utf-8');
+        const { sections } = sectionizeDocument(
+          decodedContent,
+          sectionDelimiter,
+        );
+        const updatedPath = document.path.replace('docs/', '');
+        const runtime = new BgentRuntime({
+          debugMode: true,
+          serverUrl: 'https://api.openai.com/v1',
+          databaseAdapter: new SupabaseDatabaseAdapter(
+            env.SUPABASE_URL,
+            env.SUPABASE_SERVICE_API_KEY,
+          ),
+          token: env.OPENAI_API_KEY,
+          evaluators: [],
+          actions: [wait],
+        });
+        for (const document of sections) {
+          await addLore({
+            runtime,
+            content: { content: document },
+            source: sourceDocumentationUrl + updatedPath,
+          });
+        }
+      }
+      // wait 200 ms
+      await new Promise((resolve) => setTimeout(resolve, 200));
+    }
+  } catch (error) {
+    console.error('Error fetching data from GitHub API:', error);
+  }
+}
+
+export async function fetchLatestPullRequest(
+  params: ProcessDocsParams,
+  pullRequestNum: string,
+) {
+  try {
+    const { octokit, repoOwner, repoName, pathToRepoDocuments } = params;
+
+    const page = 1;
+
+    const response = await makeRequest(octokit, {
+      method: 'GET',
+      url: '/repos/{owner}/{repo}/pulls/{pull_number}/files',
+      owner: repoOwner,
+      repo: repoName,
+      pull_number: parseInt(pullRequestNum),
+      per_page: 100,
+      page: page,
+      headers: {
+        'X-GitHub-Api-Version': '2022-11-28',
+      },
+    });
+
+    // Iterate over each file path sequentially
+    for (const filePath of response.data) {
+      if (filePath.filename.includes(`${pathToRepoDocuments}/`)) {
+        params.pathToRepoDocuments = filePath.filename as string;
+        await vectorizeDocuments(params); // Process each document one by one
+        // wait 200 ms
+        await new Promise((resolve) => setTimeout(resolve, 200));
+      }
+    }
+    // wait 200 ms
+    await new Promise((resolve) => setTimeout(resolve, 200));
+  } catch (error) {
+    console.error('Error fetching data from GitHub API:', error);
+  }
+}

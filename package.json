@@ -8,6 +8,7 @@
   "scripts": {
     "start": "wrangler start",
     "dev": "wrangler dev",
+    "concat": "node ./scripts/concat.mjs",
     "ngrok": "ngrok http 8787",
     "fix": "eslint --fix '**/*.ts'",
     "lint": "eslint '**/*.ts'",
@@ -19,7 +20,7 @@
     "@supabase/supabase-js": "^2.39.3",
     "@tsndr/cloudflare-worker-jwt": "^2.5.0",
     "@types/node": "^20.11.19",
-    "bgent": "^0.0.35",
+    "bgent": "^0.0.46",
     "discord-interactions": "^3.4.0",
     "itty-router": "^4.0.13",
     "octokit": "^3.1.2",
